@@ -17,8 +17,9 @@ Com a imagem publicada no GHCR (Postgres e storage S3 sobem junto pelo compose):
 
 ```bash
 git clone https://github.com/joaodobread/atlas && cd atlas
-export APP_SECRET="$(openssl rand -base64 48)"
-APP_IMAGE=ghcr.io/joaodobread/atlas:latest docker compose -f containers/compose.yaml --profile deps --profile app up -d --no-build
+export APP_SECRET="$(openssl rand -base64 48)" APP_IMAGE=ghcr.io/joaodobread/atlas:latest
+docker compose -f containers/compose.yaml --profile app pull app    # o serviço tem `build:`, então o `up` não baixa a imagem sozinho
+docker compose -f containers/compose.yaml --profile deps --profile app up -d --no-build
 ```
 
 Ou construindo a imagem localmente:
