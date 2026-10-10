@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/joaodobread/atlas/compare/v1.0.0...v1.0.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* quick start baixa a imagem publicada antes do up --no-build ([#16](https://github.com/joaodobread/atlas/issues/16)) ([28992af](https://github.com/joaodobread/atlas/commit/28992af14a035caa6e6aa5efd14c619bf3f2ef0e))
+
 ## 1.0.0 (2026-10-10)
 
 
