@@ -102,7 +102,14 @@ export function useReposViewModel() {
 
   const api = GithubApi.getInstance();
   const fail = (err: unknown) => pushToast('error', errorMessage(err));
-  const loadDetail = (id: number) => api.repo(id).then(setDetail).catch(fail);
+  // Só aplica a resposta do repositório ainda selecionado (cliques rápidos não trocam o painel fora de ordem).
+  const loadDetail = (id: number) =>
+    api
+      .repo(id)
+      .then((d) => {
+        if (selectedRef.current === id) setDetail(d);
+      })
+      .catch(fail);
 
   const refresh = async () => {
     const [list, st] = await Promise.all([api.repos(), api.state()]);
@@ -258,11 +265,14 @@ export function useReposViewModel() {
         else next.add(name);
         return next;
       }),
+    // Mantém o painel do anterior (esmaecido) até o novo chegar: limpar antes fazia a tela piscar.
     select: (id: number) => {
+      selectedRef.current = id;
       setSelectedId(id);
-      setDetail(null);
       void loadDetail(id);
     },
+    /** O painel ainda mostra outro repositório enquanto o selecionado carrega. */
+    detailLoading: selectedId != null && detail?.id !== selectedId,
     closeDetail: () => {
       setSelectedId(null);
       setDetail(null);

@@ -11,7 +11,7 @@ export function RepoDetailPanel({ vm, d }: { vm: ReposViewModel; d: RepoIntrospe
   const p = d.process;
   const staleDays = d.analyzedAt ? (Date.now() - Date.parse(`${d.analyzedAt.replace(' ', 'T')}Z`)) / 86_400_000 : null;
   return (
-    <aside className="repo-drawer">
+    <aside className={`repo-drawer${vm.detailLoading ? ' loading' : ''}`} aria-busy={vm.detailLoading}>
       <button className="tool panel-close" onClick={vm.closeDetail} aria-label="Fechar">
         <X size={14} />
       </button>
