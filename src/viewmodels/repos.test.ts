@@ -234,6 +234,29 @@ describe('useReposViewModel', () => {
     expect(result.current).toMatchObject({ selectedId: null, detail: null });
   });
 
+  it('trocar de repositório mantém o painel anterior até o novo chegar e ignora resposta fora de ordem', async () => {
+    let resolveSlow!: (d: RepoIntrospectionDetail) => void;
+    vi.spyOn(api, 'repo')
+      .mockResolvedValueOnce(detail({ id: 1 }))
+      .mockImplementationOnce(() => new Promise((r) => (resolveSlow = r)))
+      .mockResolvedValueOnce(detail({ id: 3 }));
+    const { result } = mount();
+    await flush();
+    act(() => result.current.select(1));
+    await waitFor(() => expect(result.current.detail?.id).toBe(1));
+    expect(result.current.detailLoading).toBe(false);
+    // Clica no 2 (lento): o painel do 1 continua, esmaecido.
+    act(() => result.current.select(2));
+    expect(result.current).toMatchObject({ selectedId: 2, detailLoading: true });
+    expect(result.current.detail?.id).toBe(1);
+    // Clica no 3 antes de o 2 responder: o 2 chega depois e é ignorado.
+    act(() => result.current.select(3));
+    await waitFor(() => expect(result.current.detail?.id).toBe(3));
+    await act(async () => resolveSlow(detail({ id: 2 })));
+    expect(result.current).toMatchObject({ selectedId: 3, detailLoading: false });
+    expect(result.current.detail?.id).toBe(3);
+  });
+
   it('acompanha a análise em andamento e recarrega documentos ao terminar', async () => {
     vi.useFakeTimers();
     const docsReload = vi.spyOn(DocsSync.getInstance(), 'reload').mockResolvedValue();

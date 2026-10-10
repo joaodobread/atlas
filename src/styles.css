@@ -2209,3 +2209,9 @@ body.resizing .scene-2d {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Painel do repositório trocando: mantém o anterior esmaecido em vez de sumir. */
+.repo-drawer.loading > :not(.panel-close) {
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
