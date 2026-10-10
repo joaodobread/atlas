@@ -1,8 +1,9 @@
 node_modules
-dist
-data
+# Ancorados na raiz: "data" sem barra ignorava também src/data (código do front).
+/dist
+/data
+/backups
+/coverage
 .env
-backups
 .DS_Store
 *.tsbuildinfo
-coverage
