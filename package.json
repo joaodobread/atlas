@@ -58,7 +58,7 @@
     "oxlint-tsgolint": "^7.0.2003",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "simple-icons": "^13.21.0",
+    "simple-icons": "^16.34.0",
     "three": "^0.186.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
