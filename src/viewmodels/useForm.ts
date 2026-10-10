@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { ZodType, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 
 export type FieldErrors = Record<string, string>;
 
@@ -23,7 +23,7 @@ export function useForm<TValues extends object>(initial: TValues) {
   }, []);
 
   /** Valida o payload; em caso de erro preenche `errors` (por campo) e retorna null. */
-  const validate = useCallback(<T>(schema: ZodType<T, ZodTypeDef, unknown>, payload: unknown): T | null => {
+  const validate = useCallback(<T>(schema: ZodType<T, unknown>, payload: unknown): T | null => {
     const result = schema.safeParse(payload);
     if (result.success) {
       setErrors({});
