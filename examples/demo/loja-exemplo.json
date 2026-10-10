@@ -1,0 +1,447 @@
+{
+  "mode": "merge",
+  "nodes": [
+    {
+      "ref": "aws",
+      "name": "AWS — Loja Exemplo",
+      "kind": "infra",
+      "icon": "si:amazonwebservices",
+      "description": "Organização fictícia usada como exemplo."
+    },
+    {
+      "ref": "prod",
+      "name": "Conta produção",
+      "kind": "infra",
+      "parent": "aws",
+      "icon": "lu:cloud"
+    },
+    {
+      "ref": "vpc",
+      "name": "VPC principal (10.0.0.0/16)",
+      "kind": "infra",
+      "parent": "prod",
+      "icon": "lu:network"
+    },
+    {
+      "ref": "pub",
+      "name": "Subnets públicas",
+      "kind": "infra",
+      "parent": "vpc",
+      "icon": "lu:globe"
+    },
+    {
+      "ref": "alb",
+      "name": "Load balancer",
+      "kind": "infra",
+      "parent": "pub",
+      "tech": "ALB",
+      "icon": "lu:network"
+    },
+    {
+      "ref": "priv",
+      "name": "Subnets privadas",
+      "kind": "infra",
+      "parent": "vpc",
+      "icon": "lu:lock"
+    },
+    {
+      "ref": "eks",
+      "name": "Cluster de aplicações",
+      "kind": "infra",
+      "parent": "priv",
+      "tech": "EKS",
+      "icon": "si:kubernetes"
+    },
+    {
+      "ref": "catalog",
+      "name": "Catálogo",
+      "kind": "service",
+      "parent": "eks",
+      "tech": "node / nestjs",
+      "icon": "si:nestjs",
+      "interfaces": [
+        {
+          "name": "GET /produtos"
+        }
+      ]
+    },
+    {
+      "ref": "checkout",
+      "name": "Checkout",
+      "kind": "service",
+      "parent": "eks",
+      "tech": "go",
+      "icon": "si:go",
+      "interfaces": [
+        {
+          "name": "POST /pedidos"
+        }
+      ]
+    },
+    {
+      "ref": "orders",
+      "name": "Pedidos",
+      "kind": "service",
+      "parent": "eks",
+      "tech": "kotlin / spring",
+      "icon": "si:spring",
+      "interfaces": [
+        {
+          "name": "pedidos.criados"
+        }
+      ]
+    },
+    {
+      "ref": "payments",
+      "name": "Pagamentos",
+      "kind": "service",
+      "parent": "eks",
+      "tech": "node / express",
+      "icon": "si:nodedotjs",
+      "interfaces": [
+        {
+          "name": "POST /cobrancas"
+        }
+      ]
+    },
+    {
+      "ref": "users",
+      "name": "Contas",
+      "kind": "service",
+      "parent": "eks",
+      "tech": "python / fastapi",
+      "icon": "si:fastapi",
+      "interfaces": [
+        {
+          "name": "POST /login"
+        }
+      ]
+    },
+    {
+      "ref": "notify",
+      "name": "Notificações",
+      "kind": "service",
+      "parent": "eks",
+      "tech": "node",
+      "icon": "si:nodedotjs"
+    },
+    {
+      "ref": "data",
+      "name": "Dados",
+      "kind": "infra",
+      "parent": "priv",
+      "icon": "lu:database"
+    },
+    {
+      "ref": "pg",
+      "name": "Banco transacional",
+      "kind": "database",
+      "parent": "data",
+      "tech": "postgresql",
+      "icon": "si:postgresql"
+    },
+    {
+      "ref": "redis",
+      "name": "Cache de sessões",
+      "kind": "database",
+      "parent": "data",
+      "tech": "redis",
+      "icon": "si:redis"
+    },
+    {
+      "ref": "search",
+      "name": "Busca de produtos",
+      "kind": "database",
+      "parent": "data",
+      "tech": "opensearch",
+      "icon": "si:elasticsearch"
+    },
+    {
+      "ref": "msg",
+      "name": "Mensageria",
+      "kind": "infra",
+      "parent": "prod",
+      "icon": "lu:inbox"
+    },
+    {
+      "ref": "q-orders",
+      "name": "Fila de pedidos",
+      "kind": "queue",
+      "parent": "msg",
+      "tech": "sqs",
+      "icon": "si:amazonsqs"
+    },
+    {
+      "ref": "q-notify",
+      "name": "Fila de notificações",
+      "kind": "queue",
+      "parent": "msg",
+      "tech": "sqs",
+      "icon": "si:amazonsqs"
+    },
+    {
+      "ref": "assets",
+      "name": "Arquivos e mídia",
+      "kind": "infra",
+      "parent": "prod",
+      "icon": "lu:hard-drive"
+    },
+    {
+      "ref": "s3",
+      "name": "Imagens dos produtos",
+      "kind": "infra",
+      "parent": "assets",
+      "tech": "s3",
+      "icon": "si:amazons3"
+    },
+    {
+      "ref": "cdn",
+      "name": "CDN",
+      "kind": "infra",
+      "parent": "assets",
+      "tech": "cloudfront",
+      "icon": "lu:globe"
+    },
+    {
+      "ref": "analytics",
+      "name": "Conta de dados",
+      "kind": "infra",
+      "parent": "aws",
+      "icon": "lu:chart-bar"
+    },
+    {
+      "ref": "stream",
+      "name": "Eventos",
+      "kind": "queue",
+      "parent": "analytics",
+      "tech": "kafka",
+      "icon": "si:apachekafka"
+    },
+    {
+      "ref": "etl",
+      "name": "Processamento",
+      "kind": "service",
+      "parent": "analytics",
+      "tech": "lambda",
+      "icon": "si:awslambda"
+    },
+    {
+      "ref": "lake",
+      "name": "Data lake",
+      "kind": "infra",
+      "parent": "analytics",
+      "tech": "s3",
+      "icon": "si:amazons3"
+    },
+    {
+      "ref": "front",
+      "name": "Canais",
+      "kind": "project",
+      "icon": "lu:monitor"
+    },
+    {
+      "ref": "web",
+      "name": "Loja web",
+      "kind": "project",
+      "parent": "front",
+      "tech": "next.js",
+      "icon": "si:nextdotjs"
+    },
+    {
+      "ref": "app",
+      "name": "App mobile",
+      "kind": "project",
+      "parent": "front",
+      "tech": "flutter",
+      "icon": "si:flutter"
+    },
+    {
+      "ref": "backoffice",
+      "name": "Backoffice",
+      "kind": "project",
+      "parent": "front",
+      "tech": "react",
+      "icon": "si:react"
+    },
+    {
+      "ref": "ext",
+      "name": "Externos",
+      "kind": "external",
+      "icon": "lu:globe"
+    },
+    {
+      "ref": "psp",
+      "name": "Gateway de pagamento",
+      "kind": "external",
+      "parent": "ext",
+      "icon": "lu:credit-card"
+    },
+    {
+      "ref": "mail",
+      "name": "E-mail transacional",
+      "kind": "external",
+      "parent": "ext",
+      "icon": "lu:mail"
+    },
+    {
+      "ref": "ship",
+      "name": "Cálculo de frete",
+      "kind": "external",
+      "parent": "ext",
+      "icon": "lu:box"
+    }
+  ],
+  "connections": [
+    {
+      "from": "web",
+      "to": "alb",
+      "protocol": "http"
+    },
+    {
+      "from": "app",
+      "to": "alb",
+      "protocol": "http"
+    },
+    {
+      "from": "backoffice",
+      "to": "alb",
+      "protocol": "http"
+    },
+    {
+      "from": "alb",
+      "to": "catalog",
+      "protocol": "http",
+      "interface": "GET /produtos"
+    },
+    {
+      "from": "alb",
+      "to": "checkout",
+      "protocol": "http",
+      "interface": "POST /pedidos"
+    },
+    {
+      "from": "alb",
+      "to": "users",
+      "protocol": "http",
+      "interface": "POST /login"
+    },
+    {
+      "from": "backoffice",
+      "to": "orders",
+      "protocol": "http",
+      "description": "Consulta e cancela pedidos"
+    },
+    {
+      "from": "catalog",
+      "to": "pg",
+      "protocol": "sql"
+    },
+    {
+      "from": "catalog",
+      "to": "search",
+      "protocol": "http",
+      "description": "Indexa e busca produtos"
+    },
+    {
+      "from": "catalog",
+      "to": "s3",
+      "protocol": "file"
+    },
+    {
+      "from": "checkout",
+      "to": "redis",
+      "protocol": "tcp",
+      "description": "Carrinho"
+    },
+    {
+      "from": "checkout",
+      "to": "payments",
+      "protocol": "grpc",
+      "interface": "POST /cobrancas"
+    },
+    {
+      "from": "checkout",
+      "to": "q-orders",
+      "protocol": "amqp",
+      "description": "Publica pedido criado"
+    },
+    {
+      "from": "checkout",
+      "to": "ship",
+      "protocol": "http"
+    },
+    {
+      "from": "q-orders",
+      "to": "orders",
+      "protocol": "amqp"
+    },
+    {
+      "from": "orders",
+      "to": "pg",
+      "protocol": "sql"
+    },
+    {
+      "from": "orders",
+      "to": "q-notify",
+      "protocol": "amqp"
+    },
+    {
+      "from": "orders",
+      "to": "stream",
+      "protocol": "kafka",
+      "interface": "pedidos.criados"
+    },
+    {
+      "from": "payments",
+      "to": "psp",
+      "protocol": "http",
+      "description": "Cobrança e estorno"
+    },
+    {
+      "from": "payments",
+      "to": "pg",
+      "protocol": "sql"
+    },
+    {
+      "from": "users",
+      "to": "pg",
+      "protocol": "sql"
+    },
+    {
+      "from": "users",
+      "to": "redis",
+      "protocol": "tcp",
+      "description": "Sessões"
+    },
+    {
+      "from": "q-notify",
+      "to": "notify",
+      "protocol": "amqp"
+    },
+    {
+      "from": "notify",
+      "to": "mail",
+      "protocol": "http"
+    },
+    {
+      "from": "stream",
+      "to": "etl",
+      "protocol": "kafka"
+    },
+    {
+      "from": "etl",
+      "to": "lake",
+      "protocol": "file"
+    },
+    {
+      "from": "cdn",
+      "to": "s3",
+      "protocol": "http"
+    },
+    {
+      "from": "web",
+      "to": "cdn",
+      "protocol": "http"
+    }
+  ]
+}
