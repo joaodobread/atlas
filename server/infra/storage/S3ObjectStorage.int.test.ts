@@ -124,7 +124,7 @@ describe('S3ObjectStorage', () => {
       const b = await storage.put('public', 'img/b.bin', bytes, 'application/octet-stream');
       expect(b.size).toBe(4);
 
-      expect(new TextDecoder().decode(await storage.get('private', 'docs/a.md'))).toBe('# Olá ✓');
+      expect(new TextDecoder().decode((await storage.get('private', 'docs/a.md'))!)).toBe('# Olá ✓');
       expect(Array.from((await storage.get('public', 'img/b.bin'))!)).toEqual([0, 1, 2, 255]);
       expect(await storage.get('public', 'docs/a.md')).toBeNull();
     });
