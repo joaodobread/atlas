@@ -1,15 +1,6 @@
 import { HttpService } from '../../core/http/HttpService.ts';
 import type { IHttpService } from '../../core/http/IHttpService.ts';
-import type {
-  AskResult,
-  DocumentDetail,
-  DocumentSummary,
-  IndexStatus,
-  LlmInfo,
-  NodeMention,
-  SearchResult,
-  WatchedFolder,
-} from '../../../shared/types.ts';
+import type { AskResult, DocumentDetail, DocumentSummary, IndexStatus, LlmInfo, NodeMention, SearchResult, WatchedFolder } from '../../../shared/types.ts';
 import type { AskInput, ImportDocumentsInput, SearchQueryInput, UpsertDocumentInput } from '../../../shared/schemas.ts';
 
 export interface UpsertOutcome {
