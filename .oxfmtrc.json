@@ -5,5 +5,11 @@
   "semi": true,
   "trailingComma": "all",
   "arrowParens": "always",
-  "ignorePatterns": ["dist/**", "coverage/**", "examples/**/*.json", "package-lock.json"]
+  "ignorePatterns": [
+    "dist/**",
+    "coverage/**",
+    "examples/**/*.json",
+    "package-lock.json",
+    "CHANGELOG.md"
+  ]
 }
