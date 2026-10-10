@@ -12,6 +12,11 @@ interface ApiRepo {
   html_url: string;
 }
 
+interface ApiTree {
+  truncated?: boolean;
+  tree: Array<{ path: string; type: string; size?: number; sha?: string }>;
+}
+
 /** Cliente da API REST do GitHub via fetch (sem clonar). */
 export class RestGithubClient implements IGithubClient {
   constructor(private readonly baseUrl = 'https://api.github.com') {}
@@ -55,8 +60,22 @@ export class RestGithubClient implements IGithubClient {
   }
 
   async tree(owner: string, repo: string, sha: string, token: string): Promise<GithubTreeEntry[]> {
-    const res = await this.json<{ tree: Array<{ path: string; type: string; size?: number }> }>(`/repos/${owner}/${repo}/git/trees/${sha}?recursive=1`, token);
-    return res.tree.filter((e) => e.type === 'blob' || e.type === 'tree').map((e) => ({ path: e.path, type: e.type as 'blob' | 'tree', size: e.size ?? 0 }));
+    const res = await this.json<ApiTree>(`/repos/${owner}/${repo}/git/trees/${sha}?recursive=1`, token);
+    // Repositório muito grande: a API corta a árvore recursiva; aí percorre pasta por pasta para não perder arquivos.
+    const entries = res.truncated ? await this.walk(owner, repo, sha, '', token) : res.tree;
+    return entries.filter((e) => e.type === 'blob' || e.type === 'tree').map((e) => ({ path: e.path, type: e.type as 'blob' | 'tree', size: e.size ?? 0 }));
+  }
+
+  /** Árvore completa sem `recursive` (que tem teto): lista cada pasta e desce nas subpastas. */
+  private async walk(owner: string, repo: string, sha: string, prefix: string, token: string): Promise<ApiTree['tree']> {
+    const level = await this.json<ApiTree>(`/repos/${owner}/${repo}/git/trees/${sha}`, token);
+    const out: ApiTree['tree'] = [];
+    for (const e of level.tree) {
+      const path = prefix ? `${prefix}/${e.path}` : e.path;
+      out.push({ ...e, path });
+      if (e.type === 'tree' && e.sha) out.push(...(await this.walk(owner, repo, e.sha, path, token)));
+    }
+    return out;
   }
 
   async file(owner: string, repo: string, sha: string, path: string, token: string): Promise<string | null> {

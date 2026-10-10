@@ -107,7 +107,7 @@ describe('CodeScanner', () => {
 
   it('não repete a mesma chamada em linhas seguidas e limita 6 por arquivo', async () => {
     const consecutive = 'fetch(a)\nfetch(b)\nfetch(c)\nfetch(d)';
-    expect((await scan({ 'a.ts': consecutive })).result.sites.map((s) => s.line)).toEqual([1, 4]);
+    expect((await scan({ 'a.ts': consecutive })).result.sites.map((s) => s.line)).toEqual([1, 3]);
     const many = spaced(Array.from({ length: 10 }, (_, i) => `fetch(${i})`));
     expect((await scan({ 'a.ts': many })).result.sites).toHaveLength(6);
   });
@@ -190,6 +190,19 @@ describe('CodeScanner — análise máxima', () => {
     // Completa (padrão) não guarda bloco nem recurso.
     const { result } = await scan({ 'src/animals/animals.service.ts': service });
     expect(result.sites[0]).toMatchObject({ code: null, endLine: null, resource: null });
+  });
+
+  it('sem limites: lê todos os arquivos (inclusive grandes) e guarda todas as chamadas', async () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 350 }, (_, i) => [`src/m${i}/a.ts`, Array.from({ length: 10 }, (_, k) => (k % 2 ? '' : `await fetch(u${k});`)).join('\n')]),
+    );
+    many['src/grande/big.ts'] = `${'// x\n'.repeat(40_000)}await fetch(big);`;
+    const { r } = await max(many);
+    expect(r.filesScanned).toBe(351);
+    expect(r.filesSkipped).toBe(0);
+    // 5 chamadas por arquivo (a completa guardaria no máximo 6 por arquivo e 250 no total).
+    expect(r.sites).toHaveLength(350 * 5 + 1);
+    expect(r.folders.length).toBe(351);
   });
 
   it('acha rotas, consumidores e jobs com o código do handler', async () => {

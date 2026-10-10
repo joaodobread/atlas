@@ -45,7 +45,9 @@ export interface CodeScanResult {
 }
 
 export interface ScanOptions {
+  /** Limites (Infinity = sem limite). */
   maxFiles: number;
+  maxFileSize: number;
   maxSites: number;
   maxSitesPerFile: number;
   /** Guarda o bloco inteiro e o recurso de cada chamada. */
@@ -55,11 +57,17 @@ export interface ScanOptions {
 }
 
 /** Completa: amostra do código, só o trecho ao redor de cada chamada. */
-export const SCAN_FULL: ScanOptions = { maxFiles: 300, maxSites: 250, maxSitesPerFile: 6, blocks: false, surfaces: false };
-/** Máxima: todo o código (até o limite de segurança), blocos inteiros, recursos e o que cada módulo expõe. */
-export const SCAN_MAX: ScanOptions = { maxFiles: 3000, maxSites: 5000, maxSitesPerFile: 60, blocks: true, surfaces: true };
+export const SCAN_FULL: ScanOptions = { maxFiles: 300, maxFileSize: 120_000, maxSites: 250, maxSitesPerFile: 6, blocks: false, surfaces: false };
+/** Máxima: TODOS os arquivos de código e todas as chamadas, sem limite; blocos inteiros, recursos e o que cada módulo expõe. */
+export const SCAN_MAX: ScanOptions = {
+  maxFiles: Infinity,
+  maxFileSize: Infinity,
+  maxSites: Infinity,
+  maxSitesPerFile: Infinity,
+  blocks: true,
+  surfaces: true,
+};
 
-const MAX_FILE_SIZE = 120_000;
 const CONTEXT_LINES = 3;
 const CONCURRENCY = 8;
 /** Blocos maiores que isso viram uma janela ao redor da linha. */
@@ -111,7 +119,7 @@ export class CodeScanner {
     onProgress?: (done: number, total: number) => void,
     options: ScanOptions = SCAN_FULL,
   ): Promise<CodeScanResult> {
-    const candidates = files.filter((f) => f.size > 0 && f.size <= MAX_FILE_SIZE);
+    const candidates = files.filter((f) => f.size > 0 && f.size <= options.maxFileSize);
     // Prioriza caminhos com cara de integração (clients, adapters, repositories…).
     const score = (p: string) =>
       /(client|adapter|gateway|repositor|provider|integration|infra|service|queue|publisher|consumer|handler|dao|store|controller|route)/i.test(p) ? 0 : 1;
@@ -135,7 +143,7 @@ export class CodeScanner {
         }
       }),
     );
-    const folders = [...new Set(chosen.map((f) => topFolder(f.path)).filter((x): x is string => !!x))].slice(0, options.surfaces ? 80 : 40);
+    const folders = [...new Set(chosen.map((f) => topFolder(f.path)).filter((x): x is string => !!x))].slice(0, options.surfaces ? Infinity : 40);
     return {
       filesScanned: Math.min(next, chosen.length),
       filesSkipped: files.length - Math.min(next, chosen.length),
@@ -166,8 +174,8 @@ function findSites(path: string, text: string, options: ScanOptions): Array<Omit
     if (/^\s*(export\s+)?(async\s+)?(func|function|def)\s|^\s*(public|private|protected)\s[^=]*\)\s*(:\s*[^=]+)?\{?\s*$/.test(line)) continue;
     const hit = PATTERNS.find(([, re]) => re.test(line));
     if (!hit) continue;
-    // Evita repetir a mesma chamada em linhas seguidas (builders em várias linhas).
-    if (out.length && out.at(-1)!.line >= i - 1) continue;
+    // Evita repetir a mesma chamada em linhas seguidas (builders em várias linhas). `line` é 1-based: a anterior é `i`.
+    if (out.length && out.at(-1)!.line >= i) continue;
     const from = Math.max(0, i - CONTEXT_LINES);
     const to = Math.min(lines.length, i + CONTEXT_LINES + 1);
     const block = options.blocks ? enclosingBlock(path, lines, i, declLine) : null;

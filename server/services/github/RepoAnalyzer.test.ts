@@ -39,7 +39,7 @@ function input(
     owner: 'acme',
     name: 'orders-api',
     description: over.description === undefined ? null : over.description,
-    collected: { facts: makeFacts(over.facts), snippets: over.snippets ?? [], readme: over.readme ?? '', sourceFiles: [] },
+    collected: { facts: makeFacts(over.facts), snippets: over.snippets ?? [], readme: over.readme ?? '', sourceFiles: [], allCodeFiles: [] },
     graph: graphOf(over.nodes ?? []),
   };
 }

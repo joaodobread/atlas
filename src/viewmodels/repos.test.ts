@@ -378,7 +378,7 @@ describe('useGenerateGraphViewModel', () => {
     expect(one.result.current.canSubmit).toBe(true);
     act(() => one.result.current.setDepth('max'));
     expect(one.result.current.costWarning?.title).toBe('Atenção: a geração máxima é a mais cara e a mais demorada.');
-    expect(one.result.current.costWarning?.body).toContain('todo o código');
+    expect(one.result.current.costWarning?.body).toContain('TODOS os arquivos de código, sem limite');
     act(() => one.result.current.setDepth('fast'));
     expect(one.result.current.showLlmWarning).toBe(false);
     act(() => one.result.current.setName('  '));

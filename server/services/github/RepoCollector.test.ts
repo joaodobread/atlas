@@ -569,6 +569,15 @@ describe('RepoCollector — GitHub, README, trechos e código', () => {
     expect(result.snippets.find((s) => s.path === 'Dockerfile')?.content).toContain('API_TOKEN=[redigido]');
     expect(result.snippets.find((s) => s.path === 'src/config/db.ts')?.content).toContain('postgres://[redigido]@db');
     expect(result.sourceFiles.map((s) => s.path).sort()).toEqual(['lib/x.py', 'src/app.ts', 'src/config/broken.ts', 'src/config/db.ts']);
+    // Máxima: todo código, inclusive migrações e scripts; testes e .d.ts continuam fora.
+    expect(result.allCodeFiles.map((s) => s.path).sort()).toEqual([
+      'lib/x.py',
+      'migrations/001.ts',
+      'scripts/seed.go',
+      'src/app.ts',
+      'src/config/broken.ts',
+      'src/config/db.ts',
+    ]);
   });
 
   it('sem README', async () => {

@@ -77,7 +77,7 @@ main.ts          entry point
 - Conteúdo de repositório que vai para banco ou LLM passa por `redactSecrets`; arquivos `.env` nunca são lidos (de `.env.example` só os nomes).
 - Introspecção nunca altera o grafo sozinha: gera uma proposta que o usuário aplica.
 - Profundidades da análise (`ANALYSIS_DEPTHS`): fast (heurística), medium (LLM), full (LLM + chamadas do código,
-  `SCAN_FULL`) e max (`SCAN_MAX`: todo o código, bloco inteiro em `call_sites.code`/`end_line`, interface usada no
+  `SCAN_FULL`) e max (`SCAN_MAX`: todos os arquivos de código (`allCodeFiles`) e chamadas, sem limite; bloco inteiro em `call_sites.code`/`end_line`, interface usada no
   destino e rotas/consumidores/jobs como interfaces do módulo). Etapas longas reportam progresso em `IntrospectionRunState.progress`.
 - Métricas de CI entram por `POST /api/metrics` (permissão `metrics:write`); a action fica em `integrations/github-action`.
 

@@ -163,7 +163,7 @@ em [`integrations/github-action`](integrations/github-action/README.md), ou com 
   - **Média** (LLM): módulos, tudo com que o repositório se comunica e recursos descobertos no README/configurações;
   - **Completa** (LLM + varredura do código, consome muitos tokens): a média mais cada chamada externa (HTTP, banco,
     fila, cache, SDKs) com arquivo, linha e trecho de código, ligada ao destino no grafo;
-  - **Máxima** (LLM + todo o código, a mais cara e demorada): guarda o **bloco inteiro** (função/método) de cada chamada,
+  - **Máxima** (LLM + **todos** os arquivos de código, sem limite; a mais cara e demorada): guarda o **bloco inteiro** (função/método) de cada chamada,
     a **interface usada** no destino (endpoint, tabela, tópico, bucket) como conexão própria e o que cada módulo **expõe**
     (rotas HTTP, consumidores de fila/tópico, jobs) como interfaces do módulo, com arquivo e linhas do handler.
     Repositórios sem análise na profundidade pedida são (re)analisados antes; o grafo inclui as caixas de infra que os contêm.

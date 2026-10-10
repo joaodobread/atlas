@@ -338,8 +338,8 @@ function heuristicMapping(proposal: RepoGraphProposal, scan: CodeScanResult): Co
   };
 }
 
-/** Locais de chamada guardados por conexão: a máxima guarda todos (até um teto de segurança). */
-const SITES_PER_CONNECTION = { normal: 20, deep: 500 };
+/** Locais de chamada guardados por conexão: a completa guarda uma amostra; a máxima guarda todos. */
+const SITES_PER_CONNECTION = { normal: 20, deep: Infinity };
 
 const SURFACE_TYPE: Record<CodeSurface['kind'], string> = { http: 'http', consumer: 'queue', job: 'job' };
 

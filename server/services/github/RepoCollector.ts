@@ -18,6 +18,8 @@ export interface CollectedRepo {
   readme: string;
   /** Arquivos de código (sem testes), para a varredura da análise completa. */
   sourceFiles: Array<{ path: string; size: number }>;
+  /** Análise máxima: todo arquivo de código do repositório (só ficam de fora testes, mocks/fixtures e dependências/builds). */
+  allCodeFiles: Array<{ path: string; size: number }>;
 }
 
 const MAX_SNIPPET = 6_000;
@@ -28,6 +30,8 @@ const BINARY = /\.(exe|dll|so|dylib|jar|war|ear|class|pyc|pyo|msi|deb|rpm|whl|o|
 const DATA_STORE_DEPS =
   /^(pg|postgres|mysql2?|mariadb|mongodb|mongoose|redis|ioredis|iovalkey|@valkey\/[\w-]+|@prisma\/client|prisma|typeorm|drizzle-orm|knex|sequelize|better-sqlite3|cassandra-driver|@aws-sdk\/client-dynamodb|github\.com\/(jackc\/pgx|lib\/pq|go-sql-driver\/mysql|redis\/go-redis|valkey-io\/[\w-]+|go-gorm\/gorm|jmoiron\/sqlx|go-jet\/jet|mongodb\/mongo-go-driver|aws\/aws-sdk-go-v2\/service\/dynamodb)(\/.*)?|gorm\.io\/[\w/]+)$/;
 const HARNESS_DEPS = /testcontainers/;
+/** Extensões de código lidas pela análise máxima. */
+const CODE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte|go|java|kt|kts|scala|groovy|py|rb|cs|php|rs|swift|dart|ex|exs)$/;
 /** Frameworks de servidor: o repositório é um serviço, mesmo sem Dockerfile. */
 const SERVER_FRAMEWORKS = [
   'NestJS',
@@ -193,6 +197,14 @@ export class RepoCollector {
             /\.(ts|tsx|js|mjs|cjs|go|java|kt|py|rb|cs|php)$/.test(b.path) &&
             !TEST_FILE.test(b.path) &&
             !/\.d\.ts$|(^|\/)(migrations?|seeds?|scripts|docs|examples?|fixtures|mocks?|__mocks__|generated|old)\//.test(b.path),
+        )
+        .map((b) => ({ path: b.path, size: b.size })),
+      allCodeFiles: blobs
+        .filter(
+          (b) =>
+            CODE_FILE.test(b.path) &&
+            !TEST_FILE.test(b.path) &&
+            !/\.d\.ts$|(^|\/)(fixtures?|mocks?|__mocks__|node_modules|vendor|dist|build|\.next|target)\//.test(b.path),
         )
         .map((b) => ({ path: b.path, size: b.size })),
       snippets: snippetOrder.filter((p) => contents.has(p)).map((p) => ({ path: p, content: redactSecrets(contents.get(p)!).slice(0, MAX_SNIPPET) })),

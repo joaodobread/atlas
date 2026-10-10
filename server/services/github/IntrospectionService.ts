@@ -398,7 +398,7 @@ export class IntrospectionService implements IIntrospectionService {
           repo.name,
           sha,
           s.token,
-          collected.sourceFiles,
+          deep ? collected.allCodeFiles : collected.sourceFiles,
           (done, total) => stage('scanning', done, total),
           deep ? SCAN_MAX : SCAN_FULL,
         );
