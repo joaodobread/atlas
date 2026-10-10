@@ -1,5 +1,5 @@
 // Entidades persistidas, compartilhadas entre servidor e UI.
-import type { AnalysisDepth, NodeKind, Permission, Role } from './constants.ts';
+import type { AnalysisDepth, IntrospectionStage, NodeKind, Permission, Role } from './constants.ts';
 
 export type { NodeKind, Protocol } from './constants.ts';
 
@@ -558,10 +558,24 @@ export interface RepoIntrospectionDetail extends RepoIntrospectionSummary {
   history: ScoreHistoryPoint[];
 }
 
+/** Progresso de um repositório em análise. */
+export interface IntrospectionProgress {
+  repo: string;
+  depth: AnalysisDepth;
+  stage: IntrospectionStage;
+  /** Itens da etapa (arquivos lidos, lotes enviados ao LLM); null quando a etapa não é contável. */
+  done: number | null;
+  total: number | null;
+  startedAt: string;
+  stageStartedAt: string;
+}
+
 export interface IntrospectionRunState {
   running: boolean;
   queued: number;
   current: string | null;
   done: number;
   failed: number;
+  /** Um item por repositório sendo analisado agora. */
+  progress: IntrospectionProgress[];
 }

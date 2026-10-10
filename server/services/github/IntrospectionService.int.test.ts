@@ -3,6 +3,7 @@ import type { PostgresDatabase } from '../../infra/database/PostgresDatabase.ts'
 import { resetDatabase, testDatabase } from '../../../test/support/database.ts';
 import { FakeGithubClient, FakeLlm } from '../../../test/support/githubFakes.ts';
 import { ActivityCollector } from './ActivityCollector.ts';
+import type { IntrospectionProgress } from '../../../shared/types.ts';
 import { EventBus } from '../../core/events/EventBus.ts';
 import { NotFoundError } from '../../core/errors/AppError.ts';
 import type { Dependency, FreshnessResult, IPackageIntel, RuntimeSupport, VulnerabilityResult } from '../../infra/packages/IPackageIntel.ts';
@@ -298,7 +299,7 @@ describe('IntrospectionService — análise', () => {
     const doc = await db.get<{ path: string; content: string }>('SELECT path, content FROM documents WHERE id = ?', [d.documentId]);
     expect(doc?.path).toBe('github/acme/orders-api.md');
     expect(doc?.content).toContain('# orders-api (repositório acme/orders-api)');
-    expect(service.state()).toEqual({ running: false, queued: 0, current: null, done: 0, failed: 0 });
+    expect(service.state()).toEqual({ running: false, queued: 0, current: null, done: 0, failed: 0, progress: [] });
   });
 
   it('sem dependências nem runtime e com falhas das fontes públicas e do processo', async () => {
@@ -374,6 +375,28 @@ describe('IntrospectionService — análise', () => {
     await service.run({ force: false, depth: 'medium' });
     await vi.waitFor(() => expect(service.state().running).toBe(false));
     expect((await original(r.id))?.status).toBe('pending');
+  });
+
+  it('progresso: etapas da análise com contagem de arquivos e lotes do LLM', async () => {
+    llm = new FakeLlm(true, [new Error('sem crédito'), { modules: [], calls: [] }]);
+    build();
+    const seen: IntrospectionProgress[] = [];
+    const read = github.file.bind(github);
+    vi.spyOn(github, 'file').mockImplementation(async (...args) => {
+      seen.push(...service.state().progress);
+      return read(...args);
+    });
+    await analyzed('orders-api', { depth: 'full' });
+    const scanning = seen.filter((p) => p.stage === 'scanning');
+    expect(seen.map((p) => p.stage)).toContain('collecting');
+    expect(scanning.length).toBeGreaterThan(0);
+    expect(scanning.at(-1)).toMatchObject({ repo: 'orders-api', depth: 'full', total: expect.any(Number) });
+    expect(scanning.at(-1)!.done).toBeLessThanOrEqual(scanning.at(-1)!.total!);
+    // Mesma etapa mantém o início da etapa; a análise inteira mantém o início geral.
+    expect(new Set(scanning.map((p) => p.stageStartedAt)).size).toBe(1);
+    expect(new Set(seen.map((p) => p.startedAt)).size).toBe(1);
+    // Ao terminar, o progresso some.
+    expect(service.state().progress).toEqual([]);
   });
 
   it('análise completa: varre o código e liga as chamadas aos destinos com os trechos', async () => {

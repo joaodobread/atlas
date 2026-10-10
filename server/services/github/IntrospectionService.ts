@@ -1,6 +1,13 @@
-import type { AnalysisDepth } from '../../../shared/constants.ts';
+import type { AnalysisDepth, IntrospectionStage } from '../../../shared/constants.ts';
 import type { RunIntrospectionInput } from '../../../shared/schemas.ts';
-import type { GraphNode, ImportResult, IntrospectionRunState, RepoIntrospectionDetail, RepoIntrospectionSummary } from '../../../shared/types.ts';
+import type {
+  GraphNode,
+  ImportResult,
+  IntrospectionProgress,
+  IntrospectionRunState,
+  RepoIntrospectionDetail,
+  RepoIntrospectionSummary,
+} from '../../../shared/types.ts';
 import { NotFoundError } from '../../core/errors/AppError.ts';
 import type { IDatabase } from '../../infra/database/IDatabase.ts';
 import type { IGithubClient } from '../../infra/github/IGithubClient.ts';
@@ -42,6 +49,8 @@ export class IntrospectionService implements IIntrospectionService {
   private readonly names = new Map<number, string>();
   private active = new Set<number>();
   private counters = { done: 0, failed: 0 };
+  /** Progresso de cada repositório em análise (some ao terminar). */
+  private readonly progress = new Map<number, IntrospectionProgress>();
 
   constructor(
     private readonly repos: IRepoIntrospectionRepository,
@@ -127,7 +136,13 @@ export class IntrospectionService implements IIntrospectionService {
       .map((id) => this.names.get(id))
       .filter(Boolean)
       .join(', ');
-    return { running: this.active.size > 0, queued: this.queue.length, current: current || null, ...this.counters };
+    return {
+      running: this.active.size > 0,
+      queued: this.queue.length,
+      current: current || null,
+      ...this.counters,
+      progress: [...this.progress.values()].map((p) => ({ ...p })),
+    };
   }
 
   async apply(id: number, graphId: number): Promise<ImportResult> {
@@ -275,6 +290,7 @@ export class IntrospectionService implements IIntrospectionService {
       this.active.add(job.id);
       void this.process(job.id, job.force, job.depth).finally(() => {
         this.active.delete(job.id);
+        this.progress.delete(job.id);
         if (!this.active.size && !this.queue.length) this.counters = { done: 0, failed: 0 };
         this.pump();
       });
@@ -285,6 +301,20 @@ export class IntrospectionService implements IIntrospectionService {
     const repo = await this.repos.findById(id);
     if (!repo) return;
     await this.repos.setStatus(id, 'running');
+    const startedAt = new Date().toISOString();
+    const stage = (s: IntrospectionStage, done: number | null = null, total: number | null = null) => {
+      const prev = this.progress.get(id);
+      this.progress.set(id, {
+        repo: repo.name,
+        depth,
+        stage: s,
+        done,
+        total,
+        startedAt,
+        stageStartedAt: prev?.stage === s ? prev.stageStartedAt : new Date().toISOString(),
+      });
+    };
+    stage('collecting');
     try {
       const s = await this.settings.require();
       const sha = await this.github.headSha(repo.owner, repo.name, repo.defaultBranch ?? 'main', s.token);
@@ -325,6 +355,7 @@ export class IntrospectionService implements IIntrospectionService {
         collected,
         graph: { nodes: graph.nodes, paths: paths(graph.nodes) },
       };
+      stage('analyzing');
       const analyzed = await this.analyzer.analyze(analyzerInput, depth);
       const { analysis } = analyzed;
       let proposal = analyzed.proposal;
@@ -332,8 +363,10 @@ export class IntrospectionService implements IIntrospectionService {
       if (analyzed.llmError) analysis.notes.push(`Análise por LLM falhou (${analyzed.llmError}); usado o modo heurístico.`);
       if (depth === 'full') {
         // Completa: varre o código e liga cada chamada externa (com o trecho) ao destino no grafo.
-        const scan = await this.scanner.scan(repo.owner, repo.name, sha, s.token, collected.sourceFiles);
-        const mapped = await this.mapper.enrich(analyzerInput, proposal, scan);
+        stage('scanning');
+        const scan = await this.scanner.scan(repo.owner, repo.name, sha, s.token, collected.sourceFiles, (done, total) => stage('scanning', done, total));
+        stage('mapping');
+        const mapped = await this.mapper.enrich(analyzerInput, proposal, scan, (done, total) => stage('mapping', done, total));
         proposal = mapped.proposal;
         analysis.notes.push(
           `Varredura do código: ${scan.filesScanned} arquivo(s) lidos, ${scan.sites.length} chamada(s) externa(s) encontrada(s)${scan.filesSkipped ? `, ${scan.filesSkipped} arquivo(s) fora do limite` : ''}.`,
@@ -342,6 +375,7 @@ export class IntrospectionService implements IIntrospectionService {
         if (mapped.llmError) analysis.notes.push(`Mapeamento das chamadas por LLM falhou (${mapped.llmError}); usado o modo heurístico.`);
       }
 
+      stage('scoring');
       const metrics = await this.metrics.latest(repo.owner, repo.name);
       const quality = this.scorer.score({ facts: f, metrics, process: proc, repo: { description: repo.description, pushedAt: repo.pushedAt } });
       const doc = await this.documents.upsertData({

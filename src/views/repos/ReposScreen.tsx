@@ -2,6 +2,7 @@ import type { QualityCategory } from '../../../shared/types.ts';
 import { useReposViewModel, type AttentionFilter, type Band, type IdleFilter } from '../../viewmodels/useReposViewModel.ts';
 import { Sparkline } from './charts.tsx';
 import { GenerateGraphDialog } from './GenerateGraphDialog.tsx';
+import { ProgressList } from './ProgressList.tsx';
 import { RepoDetailPanel } from './RepoDetailPanel.tsx';
 
 const COLUMNS = [
@@ -57,9 +58,12 @@ export function ReposScreen() {
         </header>
 
         {vm.state && (vm.state.running || vm.state.queued > 0) && (
-          <p className="hint">
-            Analisando {vm.state.current ?? '…'} — {vm.state.queued} na fila, {vm.state.done} concluído(s), {vm.state.failed} com erro.
-          </p>
+          <>
+            <p className="hint">
+              {vm.state.queued} na fila, {vm.state.done} concluído(s), {vm.state.failed} com erro.
+            </p>
+            <ProgressList rows={vm.progressRows} />
+          </>
         )}
 
         <div className="stat-tiles">

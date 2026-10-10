@@ -101,13 +101,19 @@ export class RepoAnalyzer {
 export class CodeMapper {
   constructor(private readonly llm: ILlmProvider) {}
 
-  async enrich(input: AnalyzerInput, proposal: RepoGraphProposal, scan: CodeScanResult): Promise<{ proposal: RepoGraphProposal; llmError: string | null }> {
+  /** `onProgress(lotes, total)` a cada lote enviado ao LLM (para a barra de progresso). */
+  async enrich(
+    input: AnalyzerInput,
+    proposal: RepoGraphProposal,
+    scan: CodeScanResult,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ proposal: RepoGraphProposal; llmError: string | null }> {
     if (!scan.sites.length) return { proposal, llmError: null };
     let mapping: CodeMappingOutput;
     let llmError: string | null = null;
     if (this.llm.configured) {
       try {
-        mapping = await this.mapWithLlm(input, proposal, scan);
+        mapping = await this.mapWithLlm(input, proposal, scan, onProgress);
       } catch (err) {
         llmError = err instanceof Error ? err.message : String(err);
         mapping = heuristicMapping(proposal, scan);
@@ -116,12 +122,19 @@ export class CodeMapper {
     return { proposal: applyMapping(input, proposal, scan, mapping), llmError };
   }
 
-  private async mapWithLlm(input: AnalyzerInput, proposal: RepoGraphProposal, scan: CodeScanResult): Promise<CodeMappingOutput> {
+  private async mapWithLlm(
+    input: AnalyzerInput,
+    proposal: RepoGraphProposal,
+    scan: CodeScanResult,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<CodeMappingOutput> {
     const targets = [
       ...proposal.nodes.filter((n) => n.key !== GROUP_KEY && n.key !== SELF_KEY).map((n) => `- ${n.name} [${n.kind}]`),
       ...input.graph.nodes.slice(0, 250).map((n) => `- ${input.graph.paths.get(n.id)} [${n.kind}]`),
     ];
     const out: CodeMappingOutput = { modules: [], calls: [] };
+    const batches = Math.ceil(scan.sites.length / BATCH);
+    onProgress?.(0, batches);
     for (let i = 0; i < scan.sites.length; i += BATCH) {
       const batch = scan.sites.slice(i, i + BATCH);
       const res = await this.llm.completeJson(
@@ -149,6 +162,7 @@ ${batch.map((c) => `### site ${c.id} (${c.kind}) ${c.file}:${c.line}${c.symbol ?
       );
       out.calls.push(...res.calls);
       for (const m of res.modules) if (!out.modules.some((x) => norm(x.name) === norm(m.name))) out.modules.push(m);
+      onProgress?.(i / BATCH + 1, batches);
     }
     return out;
   }

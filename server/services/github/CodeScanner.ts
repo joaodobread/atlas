@@ -62,7 +62,15 @@ const FUNCTION_DECL =
 export class CodeScanner {
   constructor(private readonly github: IGithubClient) {}
 
-  async scan(owner: string, repo: string, sha: string, token: string, files: Array<{ path: string; size: number }>): Promise<CodeScanResult> {
+  /** `onProgress(lidos, total)` a cada arquivo lido (para a barra de progresso). */
+  async scan(
+    owner: string,
+    repo: string,
+    sha: string,
+    token: string,
+    files: Array<{ path: string; size: number }>,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<CodeScanResult> {
     const candidates = files.filter((f) => f.size > 0 && f.size <= MAX_FILE_SIZE);
     // Prioriza caminhos com cara de integração (clients, adapters, repositories…).
     const score = (p: string) =>
@@ -71,12 +79,15 @@ export class CodeScanner {
 
     const sites: Omit<CodeCallSite, 'id'>[] = [];
     let next = 0;
+    let read = 0;
+    onProgress?.(0, chosen.length);
     await Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, chosen.length) }, async () => {
         while (next < chosen.length && sites.length < MAX_SITES) {
           const file = chosen[next++]!;
           const text = await this.github.file(owner, repo, sha, file.path, token).catch(() => null);
           if (text) sites.push(...findSites(file.path, text));
+          onProgress?.(++read, chosen.length);
         }
       }),
     );

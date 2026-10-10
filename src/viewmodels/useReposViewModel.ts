@@ -13,6 +13,7 @@ import { GithubApi } from '../data/api/GithubApi.ts';
 import { DocsSync } from '../data/DocsSync.ts';
 import { useGraphStore } from '../stores/graphStore.ts';
 import { useUiStore } from '../stores/uiStore.ts';
+import { describeProgress } from './introspectionProgress.ts';
 import { useCommand } from './useCommand.ts';
 import { usePermissions } from './usePermissions.ts';
 
@@ -203,6 +204,8 @@ export function useReposViewModel() {
   return {
     groups,
     visibleCount: filtered.length,
+    /** Repositórios em análise agora (etapa, barra, tempo). */
+    progressRows: (state?.progress ?? []).map((p) => describeProgress(p)),
     stats,
     state,
     detail,

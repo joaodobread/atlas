@@ -9,6 +9,7 @@ import { GraphApi } from '../data/api/GraphApi.ts';
 import { GraphSync } from '../data/GraphSync.ts';
 import { useGraphStore } from '../stores/graphStore.ts';
 import { useUiStore } from '../stores/uiStore.ts';
+import { describeProgress, type ProgressRow } from './introspectionProgress.ts';
 
 const RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2 };
 const POLL_MS = 2500;
@@ -31,7 +32,7 @@ export const DEPTH_OPTIONS: Array<{ depth: AnalysisDepth; label: string; descrip
   },
 ];
 
-type Phase = { type: 'form' } | { type: 'analyzing'; done: number; total: number } | { type: 'generating' };
+type Phase = { type: 'form' } | { type: 'analyzing'; done: number; total: number; progress: ProgressRow[] } | { type: 'generating' };
 
 /** Janela "Gerar grafo": escolhe nome e profundidade, analisa o que faltar e cria o grafo. */
 export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], onClose: () => void) {
@@ -65,9 +66,11 @@ export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], 
     for (;;) {
       if (cancelled.current) throw new Error('Cancelado');
       await new Promise((r) => setTimeout(r, POLL_MS));
-      const list = (await GithubApi.getInstance().repos()).filter((r) => names.includes(r.name));
+      const [all, state] = await Promise.all([GithubApi.getInstance().repos(), GithubApi.getInstance().state()]);
+      const list = all.filter((r) => names.includes(r.name));
       const finished = list.filter((r) => r.status === 'done' || r.status === 'error');
-      setPhase({ type: 'analyzing', done: finished.length, total: names.length });
+      const progress = state.progress.filter((p) => names.includes(p.repo)).map((p) => describeProgress(p));
+      setPhase({ type: 'analyzing', done: finished.length, total: names.length, progress });
       if (finished.length === names.length) {
         const failed = list.filter((r) => r.status === 'error');
         if (failed.length) throw new Error(`Falha ao analisar: ${failed.map((r) => `${r.name} (${r.error ?? 'erro'})`).join('; ')}`);
@@ -85,7 +88,7 @@ export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], 
     try {
       const pending = needsAnalysis(depth);
       if (pending.length) {
-        setPhase({ type: 'analyzing', done: 0, total: pending.length });
+        setPhase({ type: 'analyzing', done: 0, total: pending.length, progress: [] });
         await GithubApi.getInstance().introspect({ repos: pending.map((r) => r.name), depth, force: false });
         await waitFor(pending.map((r) => r.name));
       }

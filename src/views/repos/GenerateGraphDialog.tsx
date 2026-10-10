@@ -2,6 +2,7 @@ import type { RepoIntrospectionSummary } from '../../../shared/types.ts';
 import { useGenerateGraphViewModel } from '../../viewmodels/useGenerateGraphViewModel.ts';
 import { Field } from '../common/Field.tsx';
 import { Modal } from '../common/Modal.tsx';
+import { ProgressList } from './ProgressList.tsx';
 
 export function GenerateGraphDialog({ repos, onClose }: { repos: RepoIntrospectionSummary[]; onClose(): void }) {
   const vm = useGenerateGraphViewModel(repos, onClose);
@@ -43,9 +44,12 @@ export function GenerateGraphDialog({ repos, onClose }: { repos: RepoIntrospecti
       )}
 
       {vm.phase.type === 'analyzing' && (
-        <p className="hint">
-          Analisando repositórios… {vm.phase.done}/{vm.phase.total}
-        </p>
+        <>
+          <p className="hint">
+            Analisando repositórios… {vm.phase.done}/{vm.phase.total} concluído(s). Pode fechar a janela: a análise continua no servidor.
+          </p>
+          <ProgressList rows={vm.phase.progress} />
+        </>
       )}
       {vm.phase.type === 'generating' && <p className="hint">Montando o grafo…</p>}
       {vm.error && <p className="field-error">{vm.error}</p>}
