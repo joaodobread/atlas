@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@react-three/drei": "^9.117.3",
-    "@react-three/fiber": "^8.17.10",
+    "@react-three/fiber": "^9.8.1",
     "@testing-library/react": "^16.3.3",
     "@types/express": "^4.17.21",
     "@types/node": "^24.10.1",
