@@ -63,6 +63,8 @@ export const makeCallSite = (id: number, connection_id: number, o: Partial<CallS
   symbol: null,
   snippet: null,
   notes: null,
+  end_line: null,
+  code: null,
   ...o,
 });
 

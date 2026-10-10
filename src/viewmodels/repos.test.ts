@@ -12,7 +12,7 @@ import { makeGraphInfo, makeNode, makeRepo, resetStores, seedGraph, setPermissio
 import { DEPTH_OPTIONS, useGenerateGraphViewModel } from './useGenerateGraphViewModel.ts';
 import { ageLabel, BAND_LABEL, bandOf, CATEGORY_LABEL, CHECK_STATUS_LABEL, idleClass, useReposViewModel } from './useReposViewModel.ts';
 
-const idle: IntrospectionRunState = { running: false, queued: 0, current: null, done: 0, failed: 0 };
+const idle: IntrospectionRunState = { running: false, queued: 0, current: null, done: 0, failed: 0, progress: [] };
 const flush = () => act(async () => {});
 let api: GithubApi;
 
@@ -136,6 +136,39 @@ describe('useReposViewModel', () => {
     act(() => result.current.showIdleYear());
     expect(result.current.idle).toBe(12);
     expect(result.current.groups[0]!.repos.map((r) => r.name)).toEqual(['velho-arq', 'parado']);
+  });
+
+  it('progresso das análises em andamento vira linhas para a tela', async () => {
+    const started = new Date().toISOString();
+    const { result } = mount(repos, {
+      ...idle,
+      running: true,
+      progress: [{ repo: 'api', depth: 'full', stage: 'scanning', done: 30, total: 120, startedAt: started, stageStartedAt: started }],
+    });
+    await waitFor(() => expect(result.current.progressRows).toHaveLength(1));
+    expect(result.current.progressRows[0]).toMatchObject({ repo: 'api', label: 'Etapa 3 de 5 · Lendo o código', counter: '30/120 arquivos', percent: 25 });
+    const empty = mount();
+    await waitFor(() => expect(empty.result.current.visibleCount).toBe(5));
+    expect(empty.result.current.progressRows).toEqual([]);
+  });
+
+  it('selecionar todos vale para a lista filtrada e alterna', async () => {
+    const { result } = mount();
+    await waitFor(() => expect(result.current.visibleCount).toBe(5));
+    expect(result.current).toMatchObject({ allChecked: false, someChecked: false });
+    act(() => result.current.toggleChecked('api'));
+    expect(result.current).toMatchObject({ allChecked: false, someChecked: true });
+    act(() => result.current.toggleAll());
+    expect(result.current).toMatchObject({ allChecked: true, someChecked: false });
+    expect(result.current.checked.size).toBe(5);
+    // Com filtro, só os visíveis entram/saem.
+    act(() => result.current.setFilter('pedidos'));
+    act(() => result.current.toggleAll());
+    expect([...result.current.checked].sort((a, b) => a.localeCompare(b))).toEqual(['auth', 'bff', 'lib']);
+    act(() => result.current.toggleAll());
+    expect(result.current.checked.size).toBe(5);
+    act(() => result.current.setFilter('nada-casa'));
+    expect(result.current.allChecked).toBe(false);
   });
 
   it('rótulos de idade e cor pelo tempo parado', () => {
@@ -333,15 +366,19 @@ describe('useGenerateGraphViewModel', () => {
     expect(one.result.current).toMatchObject({
       depth: 'medium',
       showLlmWarning: true,
-      showCostWarning: false,
+      costWarning: null,
       canSubmit: true,
       busy: false,
       options: DEPTH_OPTIONS,
     });
     act(() => one.result.current.setDepth('full'));
-    expect(one.result.current).toMatchObject({ showCostWarning: true, canSubmit: false });
+    expect(one.result.current).toMatchObject({ costWarning: { title: 'Atenção: a geração completa consome muitos tokens.' }, canSubmit: false });
+    expect(one.result.current.costWarning?.body).toContain('Com 1 repositório(s)');
     act(() => one.result.current.setAcknowledged(true));
     expect(one.result.current.canSubmit).toBe(true);
+    act(() => one.result.current.setDepth('max'));
+    expect(one.result.current.costWarning?.title).toBe('Atenção: a geração máxima é a mais cara e a mais demorada.');
+    expect(one.result.current.costWarning?.body).toContain('todo o código');
     act(() => one.result.current.setDepth('fast'));
     expect(one.result.current.showLlmWarning).toBe(false);
     act(() => one.result.current.setName('  '));
@@ -404,6 +441,15 @@ describe('useGenerateGraphViewModel', () => {
     vi.spyOn(api, 'repos')
       .mockResolvedValueOnce([makeRepo(1, { name: 'a', status: 'running' }), makeRepo(2, { name: 'b', status: 'done' }), makeRepo(3, { name: 'x' })])
       .mockResolvedValueOnce([makeRepo(1, { name: 'a', status: 'done', error: 'LLM falhou (sem crédito)' }), makeRepo(2, { name: 'b', status: 'done' })]);
+    const started = new Date(Date.now() - 65_000).toISOString();
+    vi.spyOn(api, 'state').mockResolvedValue({
+      ...idle,
+      running: true,
+      progress: [
+        { repo: 'a', depth: 'medium', stage: 'analyzing', done: null, total: null, startedAt: started, stageStartedAt: started },
+        { repo: 'outro', depth: 'medium', stage: 'collecting', done: null, total: null, startedAt: started, stageStartedAt: started },
+      ],
+    });
     vi.spyOn(GraphApi.getInstance(), 'fromRepos').mockResolvedValue(makeGraphInfo(7));
     vi.spyOn(GraphSync.getInstance(), 'open').mockResolvedValue();
     const onClose = vi.fn<() => void>();
@@ -411,10 +457,16 @@ describe('useGenerateGraphViewModel', () => {
     act(() => result.current.submit());
     await flush();
     expect(introspect).toHaveBeenCalledWith({ repos: ['a', 'b'], depth: 'medium', force: false });
-    expect(result.current.phase).toEqual({ type: 'analyzing', done: 0, total: 2 });
+    expect(result.current.phase).toEqual({ type: 'analyzing', done: 0, total: 2, progress: [] });
     expect(result.current.busy).toBe(true);
     await act(() => vi.advanceTimersByTimeAsync(2500));
-    expect(result.current.phase).toEqual({ type: 'analyzing', done: 1, total: 2 });
+    // Só o progresso dos repositórios pedidos.
+    expect(result.current.phase).toEqual({
+      type: 'analyzing',
+      done: 1,
+      total: 2,
+      progress: [{ repo: 'a', label: 'Etapa 2 de 3 · Analisando com o LLM', counter: null, percent: null, elapsed: expect.stringMatching(/^1:0\d$/) }],
+    });
     await act(() => vi.advanceTimersByTimeAsync(2500));
     expect(onClose).toHaveBeenCalled();
     // Concluído com aviso vira toast informativo.
@@ -426,6 +478,7 @@ describe('useGenerateGraphViewModel', () => {
     llm(true);
     vi.spyOn(api, 'introspect').mockResolvedValue(idle);
     vi.spyOn(api, 'repos').mockResolvedValue([makeRepo(1, { name: 'a', status: 'error', error: 'boom' }), makeRepo(2, { name: 'b', status: 'error' })]);
+    vi.spyOn(api, 'state').mockResolvedValue(idle);
     const { result } = renderHook(() => useGenerateGraphViewModel([makeRepo(1, { name: 'a' }), makeRepo(2, { name: 'b' })], vi.fn<() => void>()));
     act(() => result.current.submit());
     await act(() => vi.advanceTimersByTimeAsync(2500));
@@ -444,6 +497,7 @@ describe('useGenerateGraphViewModel', () => {
     llm(true);
     vi.spyOn(api, 'introspect').mockResolvedValue(idle);
     vi.spyOn(api, 'repos').mockResolvedValue([makeRepo(1, { name: 'a', status: 'running' })]);
+    vi.spyOn(api, 'state').mockResolvedValue(idle);
     const onClose = vi.fn<() => void>();
     const { result } = renderHook(() => useGenerateGraphViewModel([makeRepo(1, { name: 'a' })], onClose));
     act(() => result.current.submit());

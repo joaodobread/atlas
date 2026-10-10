@@ -167,7 +167,7 @@ describe('RouteBinder', () => {
 
 describe('GithubController.run', () => {
   it('corpo ausente vale como {} (todos os repositórios, profundidade média)', async () => {
-    const run = vi.fn<IIntrospectionService['run']>(async () => ({ running: false, queued: 0, current: null, done: 0, failed: 0 }));
+    const run = vi.fn<IIntrospectionService['run']>(async () => ({ running: false, queued: 0, current: null, done: 0, failed: 0, progress: [] }));
     const controller = new GithubController({} as never, { run } as unknown as IIntrospectionService, {} as never);
     const res = await controller.run({ params: {}, query: {}, body: undefined, user: null, cookies: {}, ip: null, userAgent: null });
     expect(res.status).toBe(200);

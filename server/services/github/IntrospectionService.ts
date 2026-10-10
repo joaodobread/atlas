@@ -1,11 +1,19 @@
-import type { AnalysisDepth } from '../../../shared/constants.ts';
+import type { AnalysisDepth, IntrospectionStage } from '../../../shared/constants.ts';
 import type { RunIntrospectionInput } from '../../../shared/schemas.ts';
-import type { GraphNode, ImportResult, IntrospectionRunState, RepoIntrospectionDetail, RepoIntrospectionSummary } from '../../../shared/types.ts';
+import type {
+  GraphNode,
+  ImportResult,
+  IntrospectionProgress,
+  IntrospectionRunState,
+  RepoIntrospectionDetail,
+  RepoIntrospectionSummary,
+} from '../../../shared/types.ts';
 import { NotFoundError } from '../../core/errors/AppError.ts';
 import type { IDatabase } from '../../infra/database/IDatabase.ts';
 import type { IGithubClient } from '../../infra/github/IGithubClient.ts';
 import type { IPackageIntel } from '../../infra/packages/IPackageIntel.ts';
 import type { IConnectionRepository } from '../../repositories/contracts/IConnectionRepository.ts';
+import type { IInterfaceRepository } from '../../repositories/contracts/IInterfaceRepository.ts';
 import type { INodeRepository } from '../../repositories/contracts/INodeRepository.ts';
 import type { IRepoIntrospectionRepository } from '../../repositories/contracts/IRepoIntrospectionRepository.ts';
 import type { IRepoMetricsRepository } from '../../repositories/contracts/IRepoMetricsRepository.ts';
@@ -15,11 +23,12 @@ import type {
   IDocumentService,
   IGithubSettingsService,
   IGraphService,
+  IInterfaceService,
   IIntrospectionService,
   INodeService,
 } from '../contracts/index.ts';
 import type { QualityScorer } from './QualityScorer.ts';
-import type { CodeScanner } from './CodeScanner.ts';
+import { SCAN_FULL, SCAN_MAX, type CodeScanner } from './CodeScanner.ts';
 import type { CodeMapper, RepoAnalyzer } from './RepoAnalyzer.ts';
 import type { ProcessCollector } from './ProcessCollector.ts';
 import type { ActivityCollector } from './ActivityCollector.ts';
@@ -27,7 +36,7 @@ import type { RepoCollector } from './RepoCollector.ts';
 import { repoMarkdown } from './RepoDocumentWriter.ts';
 
 const CONCURRENCY = 2;
-const DEPTH_RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2 };
+const DEPTH_RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2, max: 3 };
 
 /**
  * Introspecção dos repositórios do GitHub: coleta fatos, consulta fontes públicas (OSV, registries, endoflife),
@@ -42,6 +51,8 @@ export class IntrospectionService implements IIntrospectionService {
   private readonly names = new Map<number, string>();
   private active = new Set<number>();
   private counters = { done: 0, failed: 0 };
+  /** Progresso de cada repositório em análise (some ao terminar). */
+  private readonly progress = new Map<number, IntrospectionProgress>();
 
   constructor(
     private readonly repos: IRepoIntrospectionRepository,
@@ -60,6 +71,8 @@ export class IntrospectionService implements IIntrospectionService {
     private readonly nodeService: INodeService,
     private readonly connectionService: IConnectionService,
     private readonly callSiteService: ICallSiteService,
+    private readonly interfaceService: IInterfaceService,
+    private readonly interfaces: IInterfaceRepository,
     private readonly nodes: INodeRepository,
     private readonly connections: IConnectionRepository,
     private readonly documents: IDocumentService,
@@ -127,7 +140,13 @@ export class IntrospectionService implements IIntrospectionService {
       .map((id) => this.names.get(id))
       .filter(Boolean)
       .join(', ');
-    return { running: this.active.size > 0, queued: this.queue.length, current: current || null, ...this.counters };
+    return {
+      running: this.active.size > 0,
+      queued: this.queue.length,
+      current: current || null,
+      ...this.counters,
+      progress: [...this.progress.values()].map((p) => ({ ...p })),
+    };
   }
 
   async apply(id: number, graphId: number): Promise<ImportResult> {
@@ -205,15 +224,36 @@ export class IntrospectionService implements IIntrospectionService {
         }
       }
       for (const n of pending) result.warnings.push(`Nó "${n.name}" ignorado: o pai "${n.parentKey}" não existe na proposta`);
+      /** Interface do nó (criada se não existir) — rotas/consumidores expostos e o que é usado no destino. */
+      const ensureInterface = async (nodeId: number, name: string, extra: { type?: string | null; spec?: string | null; description?: string | null } = {}) => {
+        const found = await this.interfaces.findByNodeAndName(nodeId, name);
+        if (found) return found.id;
+        result.interfacesCreated++;
+        return (
+          await this.interfaceService.create({
+            node_id: nodeId,
+            name,
+            type: extra.type ?? null,
+            spec: extra.spec ?? null,
+            description: extra.description ?? null,
+          })
+        ).id;
+      };
+      for (const n of proposal.nodes) {
+        const nodeId = ids.get(n.key);
+        if (nodeId == null) continue;
+        for (const i of n.interfaces ?? []) await ensureInterface(nodeId, i.name, i);
+      }
       for (const c of proposal.connections) {
         const source = ids.get(c.fromKey);
         const target = ids.get(c.toKey);
         if (source == null || target == null || source === target) continue;
-        if (await this.connections.findByEndpoints(source, target, null)) continue;
+        const ifaceId = c.interface ? await ensureInterface(target, c.interface) : null;
+        if (await this.connections.findByEndpoints(source, target, ifaceId)) continue;
         const conn = await this.connectionService.create({
           source_id: source,
           target_id: target,
-          target_interface_id: null,
+          target_interface_id: ifaceId,
           parent_connection_id: null,
           protocol: c.protocol,
           description: c.description,
@@ -227,6 +267,8 @@ export class IntrospectionService implements IIntrospectionService {
             symbol: site.symbol,
             snippet: site.snippet,
             notes: null,
+            end_line: site.end_line ?? null,
+            code: site.code ?? null,
           });
           result.callSitesCreated++;
         }
@@ -275,6 +317,7 @@ export class IntrospectionService implements IIntrospectionService {
       this.active.add(job.id);
       void this.process(job.id, job.force, job.depth).finally(() => {
         this.active.delete(job.id);
+        this.progress.delete(job.id);
         if (!this.active.size && !this.queue.length) this.counters = { done: 0, failed: 0 };
         this.pump();
       });
@@ -285,6 +328,20 @@ export class IntrospectionService implements IIntrospectionService {
     const repo = await this.repos.findById(id);
     if (!repo) return;
     await this.repos.setStatus(id, 'running');
+    const startedAt = new Date().toISOString();
+    const stage = (s: IntrospectionStage, done: number | null = null, total: number | null = null) => {
+      const prev = this.progress.get(id);
+      this.progress.set(id, {
+        repo: repo.name,
+        depth,
+        stage: s,
+        done,
+        total,
+        startedAt,
+        stageStartedAt: prev?.stage === s ? prev.stageStartedAt : new Date().toISOString(),
+      });
+    };
+    stage('collecting');
     try {
       const s = await this.settings.require();
       const sha = await this.github.headSha(repo.owner, repo.name, repo.defaultBranch ?? 'main', s.token);
@@ -325,23 +382,37 @@ export class IntrospectionService implements IIntrospectionService {
         collected,
         graph: { nodes: graph.nodes, paths: paths(graph.nodes) },
       };
+      stage('analyzing');
       const analyzed = await this.analyzer.analyze(analyzerInput, depth);
       const { analysis } = analyzed;
       let proposal = analyzed.proposal;
       let llmError = analyzed.llmError;
       if (analyzed.llmError) analysis.notes.push(`Análise por LLM falhou (${analyzed.llmError}); usado o modo heurístico.`);
-      if (depth === 'full') {
+      if (depth === 'full' || depth === 'max') {
         // Completa: varre o código e liga cada chamada externa (com o trecho) ao destino no grafo.
-        const scan = await this.scanner.scan(repo.owner, repo.name, sha, s.token, collected.sourceFiles);
-        const mapped = await this.mapper.enrich(analyzerInput, proposal, scan);
+        // Máxima: todo o código, blocos inteiros, interfaces usadas e o que cada módulo expõe.
+        const deep = depth === 'max';
+        stage('scanning');
+        const scan = await this.scanner.scan(
+          repo.owner,
+          repo.name,
+          sha,
+          s.token,
+          collected.sourceFiles,
+          (done, total) => stage('scanning', done, total),
+          deep ? SCAN_MAX : SCAN_FULL,
+        );
+        stage('mapping');
+        const mapped = await this.mapper.enrich(analyzerInput, proposal, scan, (done, total) => stage('mapping', done, total), deep);
         proposal = mapped.proposal;
         analysis.notes.push(
-          `Varredura do código: ${scan.filesScanned} arquivo(s) lidos, ${scan.sites.length} chamada(s) externa(s) encontrada(s)${scan.filesSkipped ? `, ${scan.filesSkipped} arquivo(s) fora do limite` : ''}.`,
+          `Varredura do código: ${scan.filesScanned} arquivo(s) lidos, ${scan.sites.length} chamada(s) externa(s) encontrada(s)${deep ? `, ${scan.surfaces.length} rota(s)/consumidor(es)/job(s) expostos` : ''}${scan.filesSkipped ? `, ${scan.filesSkipped} arquivo(s) fora do limite` : ''}.`,
         );
         llmError ??= mapped.llmError;
         if (mapped.llmError) analysis.notes.push(`Mapeamento das chamadas por LLM falhou (${mapped.llmError}); usado o modo heurístico.`);
       }
 
+      stage('scoring');
       const metrics = await this.metrics.latest(repo.owner, repo.name);
       const quality = this.scorer.score({ facts: f, metrics, process: proc, repo: { description: repo.description, pushedAt: repo.pushedAt } });
       const doc = await this.documents.upsertData({

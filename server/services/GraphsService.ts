@@ -12,8 +12,8 @@ import type { INodeRepository } from '../repositories/contracts/INodeRepository.
 import type { IRepoIntrospectionRepository } from '../repositories/contracts/IRepoIntrospectionRepository.ts';
 import type { IGraphService, IGraphsService, IIntrospectionService } from './contracts/index.ts';
 
-const DEPTH_RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2 };
-const DEPTH_LABEL: Record<AnalysisDepth, string> = { fast: 'rápida', medium: 'média', full: 'completa' };
+const DEPTH_RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2, max: 3 };
+const DEPTH_LABEL: Record<AnalysisDepth, string> = { fast: 'rápida', medium: 'média', full: 'completa', max: 'máxima' };
 /** Na geração rápida só entram vizinhos "de infra": bancos, filas, infraestrutura e externos. */
 const FAST_KINDS = new Set(['database', 'queue', 'infra', 'external']);
 
@@ -218,6 +218,8 @@ export class GraphsService implements IGraphsService {
         symbol: s.symbol,
         snippet: s.snippet,
         notes: s.notes,
+        end_line: s.end_line,
+        code: s.code,
       });
     }
   }

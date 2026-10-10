@@ -108,14 +108,23 @@ export function ConnectionDetailView({ connectionId }: { connectionId: number })
         <Section title="Onde a chamada é feita" count={vm.callSites.length}>
           <ul className="list">
             {vm.callSites.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className="callsite">
                 <span>
                   <code>
                     {s.file_path}
                     {s.line != null && `:${s.line}`}
+                    {s.end_line != null && s.end_line !== s.line && `-${s.end_line}`}
                   </code>
                   {s.symbol && <span className="muted"> {s.symbol}</span>}
                   {s.notes && <span className="note">{s.notes}</span>}
+                  {(s.code ?? s.snippet) && (
+                    <details className="callsite-code">
+                      <summary className="small muted">{s.code ? 'ver o bloco de código' : 'ver o trecho'}</summary>
+                      <pre>
+                        <code>{s.code ?? s.snippet}</code>
+                      </pre>
+                    </details>
+                  )}
                 </span>
                 <button className="icon" title="Remover" onClick={() => vm.removeCallSite(s.id)}>
                   ×

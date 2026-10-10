@@ -9,8 +9,9 @@ import { GraphApi } from '../data/api/GraphApi.ts';
 import { GraphSync } from '../data/GraphSync.ts';
 import { useGraphStore } from '../stores/graphStore.ts';
 import { useUiStore } from '../stores/uiStore.ts';
+import { describeProgress, type ProgressRow } from './introspectionProgress.ts';
 
-const RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2 };
+const RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2, max: 3 };
 const POLL_MS = 2500;
 
 export const DEPTH_OPTIONS: Array<{ depth: AnalysisDepth; label: string; description: string }> = [
@@ -29,9 +30,30 @@ export const DEPTH_OPTIONS: Array<{ depth: AnalysisDepth; label: string; descrip
     label: 'Completa',
     description: 'A média + varredura do código: módulos e cada chamada externa (HTTP, banco, fila, cache, SDKs) com o trecho de código que a faz.',
   },
+  {
+    depth: 'max',
+    label: 'Máxima',
+    description:
+      'Tudo: lê todo o código, guarda o bloco inteiro de cada chamada, a interface usada no destino (endpoint, tabela, tópico) e o que cada módulo expõe (rotas, consumidores, jobs).',
+  },
 ];
 
-type Phase = { type: 'form' } | { type: 'analyzing'; done: number; total: number } | { type: 'generating' };
+/** Aviso de custo das profundidades que leem o código (exigem confirmação). */
+export function costWarning(depth: AnalysisDepth, repos: number): { title: string; body: string } | null {
+  if (depth === 'full')
+    return {
+      title: 'Atenção: a geração completa consome muitos tokens.',
+      body: `Para cada repositório o servidor lê até 300 arquivos de código pela API do GitHub e envia as chamadas encontradas ao LLM em lotes (várias requisições grandes por repositório, com esforço alto). Com ${repos} repositório(s) isso pode levar vários minutos e custar bem mais que a média.`,
+    };
+  if (depth === 'max')
+    return {
+      title: 'Atenção: a geração máxima é a mais cara e a mais demorada.',
+      body: `Para cada repositório o servidor lê todo o código (até 3.000 arquivos), envia o bloco inteiro de cada chamada ao LLM em lotes pequenos e ainda analisa cada rota, consumidor e job. Em repositórios grandes são dezenas a centenas de requisições: com ${repos} repositório(s) pode levar de minutos a mais de uma hora e custar várias vezes a completa. O progresso aparece aqui e na tela de repositórios.`,
+    };
+  return null;
+}
+
+type Phase = { type: 'form' } | { type: 'analyzing'; done: number; total: number; progress: ProgressRow[] } | { type: 'generating' };
 
 /** Janela "Gerar grafo": escolhe nome e profundidade, analisa o que faltar e cria o grafo. */
 export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], onClose: () => void) {
@@ -65,9 +87,11 @@ export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], 
     for (;;) {
       if (cancelled.current) throw new Error('Cancelado');
       await new Promise((r) => setTimeout(r, POLL_MS));
-      const list = (await GithubApi.getInstance().repos()).filter((r) => names.includes(r.name));
+      const [all, state] = await Promise.all([GithubApi.getInstance().repos(), GithubApi.getInstance().state()]);
+      const list = all.filter((r) => names.includes(r.name));
       const finished = list.filter((r) => r.status === 'done' || r.status === 'error');
-      setPhase({ type: 'analyzing', done: finished.length, total: names.length });
+      const progress = state.progress.filter((p) => names.includes(p.repo)).map((p) => describeProgress(p));
+      setPhase({ type: 'analyzing', done: finished.length, total: names.length, progress });
       if (finished.length === names.length) {
         const failed = list.filter((r) => r.status === 'error');
         if (failed.length) throw new Error(`Falha ao analisar: ${failed.map((r) => `${r.name} (${r.error ?? 'erro'})`).join('; ')}`);
@@ -85,7 +109,7 @@ export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], 
     try {
       const pending = needsAnalysis(depth);
       if (pending.length) {
-        setPhase({ type: 'analyzing', done: 0, total: pending.length });
+        setPhase({ type: 'analyzing', done: 0, total: pending.length, progress: [] });
         await GithubApi.getInstance().introspect({ repos: pending.map((r) => r.name), depth, force: false });
         await waitFor(pending.map((r) => r.name));
       }
@@ -115,13 +139,13 @@ export function useGenerateGraphViewModel(selected: RepoIntrospectionSummary[], 
     pendingCount: pending.length,
     llmConfigured,
     showLlmWarning: depth !== 'fast' && llmConfigured === false,
-    showCostWarning: depth === 'full',
+    costWarning: costWarning(depth, selected.length),
     acknowledged,
     setAcknowledged,
     phase,
     error,
     busy: phase.type !== 'form',
-    canSubmit: phase.type === 'form' && name.trim().length > 0 && (depth !== 'full' || acknowledged),
+    canSubmit: phase.type === 'form' && name.trim().length > 0 && (!costWarning(depth, selected.length) || acknowledged),
     submit: () => void submit(),
     close: () => {
       cancelled.current = true;

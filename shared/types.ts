@@ -1,5 +1,5 @@
 // Entidades persistidas, compartilhadas entre servidor e UI.
-import type { AnalysisDepth, NodeKind, Permission, Role } from './constants.ts';
+import type { AnalysisDepth, IntrospectionStage, NodeKind, Permission, Role } from './constants.ts';
 
 export type { NodeKind, Protocol } from './constants.ts';
 
@@ -51,6 +51,10 @@ export interface CallSite {
   symbol: string | null;
   snippet: string | null;
   notes: string | null;
+  /** Linha onde termina o bloco de código (análise máxima). */
+  end_line: number | null;
+  /** Bloco inteiro (função/método) que faz a chamada, sem segredos (análise máxima). */
+  code: string | null;
 }
 
 export interface GraphData {
@@ -490,6 +494,8 @@ export interface ProposalNode {
   description: string | null;
   /** key do pai dentro da proposta (null = raiz). Ignorado para nós existentes. */
   parentKey: string | null;
+  /** O que o nó expõe (rotas HTTP, consumidores de fila, jobs) — análise máxima. */
+  interfaces?: Array<{ name: string; type: string | null; description: string | null; spec: string | null }>;
 }
 
 /** Mudanças propostas no grafo; só são aplicadas quando alguém revisa e confirma. */
@@ -500,8 +506,17 @@ export interface RepoGraphProposal {
     toKey: string;
     protocol: string | null;
     description: string | null;
-    /** Análise completa: onde no código a chamada é feita. */
-    callSites?: Array<{ file_path: string; line: number | null; symbol: string | null; snippet: string | null }>;
+    /** Interface do destino usada (endpoint, tabela, tópico); criada se não existir. */
+    interface?: string | null;
+    /** Análise completa/máxima: onde no código a chamada é feita. */
+    callSites?: Array<{
+      file_path: string;
+      line: number | null;
+      symbol: string | null;
+      snippet: string | null;
+      end_line?: number | null;
+      code?: string | null;
+    }>;
   }>;
 }
 
@@ -558,10 +573,24 @@ export interface RepoIntrospectionDetail extends RepoIntrospectionSummary {
   history: ScoreHistoryPoint[];
 }
 
+/** Progresso de um repositório em análise. */
+export interface IntrospectionProgress {
+  repo: string;
+  depth: AnalysisDepth;
+  stage: IntrospectionStage;
+  /** Itens da etapa (arquivos lidos, lotes enviados ao LLM); null quando a etapa não é contável. */
+  done: number | null;
+  total: number | null;
+  startedAt: string;
+  stageStartedAt: string;
+}
+
 export interface IntrospectionRunState {
   running: boolean;
   queued: number;
   current: string | null;
   done: number;
   failed: number;
+  /** Um item por repositório sendo analisado agora. */
+  progress: IntrospectionProgress[];
 }

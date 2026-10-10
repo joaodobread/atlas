@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeGithubClient } from '../../../test/support/githubFakes.ts';
-import { CodeScanner, topFolder } from './CodeScanner.ts';
+import { CodeScanner, enclosingBlock, findSurfaces, resourceOf, SCAN_MAX, topFolder } from './CodeScanner.ts';
 
 const spaced = (lines: string[]) => lines.flatMap((l) => [l, '', '']).join('\n');
 
@@ -145,7 +145,7 @@ describe('CodeScanner', () => {
 
   it('lista vazia', async () => {
     const { result } = await scan({}, []);
-    expect(result).toEqual({ filesScanned: 0, filesSkipped: 0, sites: [], folders: [] });
+    expect(result).toEqual({ filesScanned: 0, filesSkipped: 0, sites: [], surfaces: [], folders: [] });
   });
 
   it('respeita os limites de arquivos (300) e de chamadas (250)', async () => {
@@ -158,6 +158,125 @@ describe('CodeScanner', () => {
     expect(result.filesScanned).toBeLessThanOrEqual(300);
     expect(result.filesSkipped).toBe(320 - result.filesScanned);
     expect(result.folders).toHaveLength(40);
+  });
+});
+
+describe('CodeScanner — análise máxima', () => {
+  const max = (files: Record<string, string>) => {
+    const g = new FakeGithubClient(files);
+    const progress: Array<[number, number]> = [];
+    const all = Object.entries(files).map(([path, text]) => ({ path, size: text.length }));
+    return new CodeScanner(g).scan('acme', 'api', 'sha', 'tok', all, (d, t) => progress.push([d, t]), SCAN_MAX).then((r) => ({ r, progress }));
+  };
+
+  it('guarda o bloco inteiro da função, onde termina e o recurso usado; informa o progresso', async () => {
+    const service = [
+      'export class AnimalsService {',
+      '  async findOne(id: number) {',
+      '    const a = await this.animalsRepository.findOne({ where: { id } });',
+      '    if (!a) throw new Error("x");',
+      '    return a;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { r, progress } = await max({ 'src/animals/animals.service.ts': service });
+    expect(r.sites).toEqual([
+      expect.objectContaining({ kind: 'sql', line: 3, symbol: 'findOne', endLine: 6, resource: 'animals', code: service.split('\n').slice(1, 6).join('\n') }),
+    ]);
+    expect(progress).toEqual([
+      [0, 1],
+      [1, 1],
+    ]);
+    // Completa (padrão) não guarda bloco nem recurso.
+    const { result } = await scan({ 'src/animals/animals.service.ts': service });
+    expect(result.sites[0]).toMatchObject({ code: null, endLine: null, resource: null });
+  });
+
+  it('acha rotas, consumidores e jobs com o código do handler', async () => {
+    const nest = [
+      "@Controller('pedidos')",
+      'export class PedidosController {',
+      "  @Get(':id')",
+      '  find(@Param() p) {',
+      '    return this.s.find(p.id);',
+      '  }',
+      '  @Post()',
+      '  create(@Body() b) {',
+      '    return this.s.create(b);',
+      '  }',
+      '}',
+    ].join('\n');
+    const { r } = await max({ 'src/pedidos/pedidos.controller.ts': nest });
+    expect(r.surfaces.map((x) => [x.kind, x.name, x.line, x.endLine, x.symbol])).toEqual([
+      ['http', 'GET /pedidos/:id', 3, 6, 'find'],
+      ['http', 'POST /pedidos', 7, 10, 'create'],
+    ]);
+    expect(r.surfaces[0]!.code).toContain('return this.s.find(p.id);');
+    expect(r.surfaces.map((x) => x.id)).toEqual([1, 2]);
+  });
+
+  it.each([
+    ["router.post('/cobrancas', handler)", 'http', 'POST /cobrancas'],
+    ['  @GetMapping("/clientes/{id}")', 'http', 'GET /clientes/{id}'],
+    ['r.DELETE("/v1/itens/:id", h)', 'http', 'DELETE /v1/itens/:id'],
+    ['mux.HandleFunc("/health", h)', 'http', 'ANY /health'],
+    ["@router.get('/usuarios')", 'http', 'GET /usuarios'],
+    ["@app.route('/legado')", 'http', 'ANY /legado'],
+    ["@SqsMessageHandler('pedidos-criados', false)", 'consumer', 'pedidos-criados'],
+    ["@EventPattern('pagamento.aprovado')", 'consumer', 'pagamento.aprovado'],
+    ['@KafkaListener(topics = "telemetria")', 'consumer', 'telemetria'],
+    ['@RabbitListener(queues = "emails")', 'consumer', 'emails'],
+    ["await consumer.subscribe({ topic: 'eventos' })", 'consumer', 'eventos'],
+    ["channel.consume('notificacoes', fn)", 'consumer', 'notificacoes'],
+    ["new Worker('relatorios', fn)", 'consumer', 'relatorios'],
+    ["@Cron('0 3 * * *')", 'job', '0 3 * * *'],
+    ["cron.schedule('*/5 * * * *', fn)", 'job', '*/5 * * * *'],
+    ['@Scheduled(fixedRate = 5000)', 'job', 'fixedRate = 5000'],
+  ])('%s → %s %s', (line, kind, name) => {
+    expect(findSurfaces('src/x.ts', line)).toEqual([expect.objectContaining({ kind, name, line: 1 })]);
+  });
+
+  it('prefixo de classe do Spring e handler Python pela indentação', () => {
+    const spring = ['@RequestMapping("/api")', 'public class C {', '  @PostMapping("/itens")', '  public R add() {', '    return r;', '  }', '}'].join('\n');
+    expect(findSurfaces('C.java', spring).map((x) => x.name)).toEqual(['POST /api/itens']);
+    const py = ["@app.get('/saude')", 'def saude():', '    return {"ok": True}', '', 'x = 1'].join('\n');
+    expect(findSurfaces('app.py', py)[0]).toMatchObject({ name: 'GET /saude', endLine: 3, symbol: 'saude' });
+    // Sem chave nem indentação: janela curta.
+    expect(findSurfaces('x.ts', "app.get('/a', h)")[0]).toMatchObject({ endLine: 1 });
+  });
+
+  it('bloco: janela sem declaração, chamada fora da função e função grande demais', () => {
+    const lines = Array.from({ length: 400 }, (_, i) => `l${i}`);
+    expect(enclosingBlock('a.ts', lines, 50, null)).toEqual({ start: 40, end: 60 });
+    // Declaração sem chave: cai na janela.
+    expect(enclosingBlock('a.ts', lines, 50, 10)).toEqual({ start: 40, end: 60 });
+    const big = ['function f() {', ...Array.from({ length: 300 }, () => 'x();'), '}'];
+    expect(enclosingBlock('a.ts', big, 200, 0)).toEqual({ start: 160, end: 240 });
+    const small = ['function f() {', 'x();', '}', 'y();'];
+    expect(enclosingBlock('a.ts', small, 3, 0)).toEqual({ start: 0, end: 3 });
+    expect(enclosingBlock('a.py', ['def f():', 'x = 1'], 1, 0)).toEqual({ start: 0, end: 1 });
+    expect(enclosingBlock('a.py', ['def f():', 'y()', 'z()'], 2, 0)).toEqual({ start: 0, end: 2 });
+  });
+
+  it.each([
+    ['sql', 'SELECT * FROM pedidos WHERE id = $1', 'pedidos'],
+    ['sql', 'INSERT INTO "clientes" (a) VALUES (1)', 'clientes'],
+    ['sql', 'UPDATE estoque SET qtd = 1', 'estoque'],
+    ['sql', 'const r = getRepository(Pedido)', 'Pedido'],
+    ['sql', 'await prisma.usuario.findMany()', 'usuario'],
+    ['sql', 'await this.animalsRepository.save(a)', 'animals'],
+    ['sql', 'db.query(sql)', null],
+    ['http', "await axios.post('https://api.pagamentos.exemplo/cobrancas', b)", 'POST /cobrancas'],
+    ['http', "fetch('/api/itens', { method: 'PUT' })", 'PUT /api/itens'],
+    ['http', "fetch('https://exemplo.com')", 'GET /'],
+    ['http', 'fetch(url)', null],
+    ['queue', "new SendMessageCommand({ QueueUrl: 'pedidos', MessageBody: b })", 'pedidos'],
+    ['queue', "channel.sendToQueue('emails', buf)", 'emails'],
+    ['queue', "await fila.add('relatorio-mensal', dados)", 'relatorio-mensal'],
+    ['storage', "new PutObjectCommand({ Bucket: 'imagens', Key: k })", 'imagens'],
+    ['cache', "redis.get('k')", null],
+  ] as const)('recurso %s: %s', (kind, text, expected) => {
+    expect(resourceOf(kind, text)).toBe(expected);
   });
 });
 

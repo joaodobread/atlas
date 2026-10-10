@@ -63,6 +63,8 @@ export class ExchangeService implements IExchangeService {
           symbol: opt(s.symbol),
           snippet: opt(s.snippet),
           notes: opt(s.notes),
+          end_line: opt(s.end_line),
+          code: opt(s.code),
         })),
     }));
 

@@ -2129,3 +2129,83 @@ body.resizing .scene-2d {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Progresso das análises */
+.progress-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.progress-bar {
+  position: relative;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #ffffff14;
+}
+.progress-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--accent, #7c8cff);
+  transition: width 0.4s ease;
+}
+.progress-bar.indeterminate > span {
+  width: 35%;
+  animation: progress-slide 1.4s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar.indeterminate > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}
+
+/* Código dos locais de chamada */
+.callsite > span {
+  min-width: 0;
+  flex: 1;
+}
+.callsite-code summary {
+  cursor: pointer;
+  margin-top: 2px;
+}
+.callsite-code pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #00000040;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+/* Erro/aviso da última análise na linha da tabela de repositórios */
+.row-message {
+  display: block;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

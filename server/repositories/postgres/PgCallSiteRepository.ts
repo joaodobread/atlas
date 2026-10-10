@@ -4,7 +4,7 @@ import { PgCrudRepository } from './PgCrudRepository.ts';
 
 export class PgCallSiteRepository extends PgCrudRepository<CallSite, CallSiteCreateData, CallSiteUpdateData> implements ICallSiteRepository {
   protected readonly table = 'call_sites';
-  protected readonly writableColumns = ['connection_id', 'file_path', 'line', 'symbol', 'snippet', 'notes'] as const;
+  protected readonly writableColumns = ['connection_id', 'file_path', 'line', 'symbol', 'snippet', 'notes', 'end_line', 'code'] as const;
   protected override readonly orderBy = 'file_path, line';
 
   async existsAt(connectionId: number, filePath: string, line: number | null): Promise<boolean> {

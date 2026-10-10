@@ -3,6 +3,7 @@ import type { PostgresDatabase } from '../../infra/database/PostgresDatabase.ts'
 import { resetDatabase, testDatabase } from '../../../test/support/database.ts';
 import { FakeGithubClient, FakeLlm } from '../../../test/support/githubFakes.ts';
 import { ActivityCollector } from './ActivityCollector.ts';
+import type { IntrospectionProgress } from '../../../shared/types.ts';
 import { EventBus } from '../../core/events/EventBus.ts';
 import { NotFoundError } from '../../core/errors/AppError.ts';
 import type { Dependency, FreshnessResult, IPackageIntel, RuntimeSupport, VulnerabilityResult } from '../../infra/packages/IPackageIntel.ts';
@@ -11,6 +12,7 @@ import { PgCallSiteRepository } from '../../repositories/postgres/PgCallSiteRepo
 import { PgConnectionRepository } from '../../repositories/postgres/PgConnectionRepository.ts';
 import { PgGraphRepository } from '../../repositories/postgres/PgGraphRepository.ts';
 import { PgInterfaceRepository } from '../../repositories/postgres/PgInterfaceRepository.ts';
+import { InterfaceService } from '../InterfaceService.ts';
 import { PgNodeRepository } from '../../repositories/postgres/PgNodeRepository.ts';
 import { PgRepoIntrospectionRepository } from '../../repositories/postgres/PgRepoIntrospectionRepository.ts';
 import { PgRepoMetricsRepository } from '../../repositories/postgres/PgRepoMetricsRepository.ts';
@@ -123,6 +125,7 @@ let repos: PgRepoIntrospectionRepository;
 let metrics: PgRepoMetricsRepository;
 let nodes: PgNodeRepository;
 let connections: PgConnectionRepository;
+let interfacesRepo: PgInterfaceRepository;
 let collector: RepoCollector;
 let processCollector: ProcessCollector;
 let service: IntrospectionService;
@@ -133,7 +136,7 @@ function build() {
   metrics = new PgRepoMetricsRepository(db);
   nodes = new PgNodeRepository(db);
   connections = new PgConnectionRepository(db);
-  const interfaces = new PgInterfaceRepository(db);
+  const interfaces = (interfacesRepo = new PgInterfaceRepository(db));
   const callSites = new PgCallSiteRepository(db);
   const graphs = new PgGraphRepository(db);
   collector = new RepoCollector(github);
@@ -155,6 +158,8 @@ function build() {
     new NodeService(nodes, graphs, events),
     new ConnectionService(connections, nodes, interfaces, events),
     new CallSiteService(callSites, connections, events),
+    new InterfaceService(interfaces, nodes, events),
+    interfaces,
     nodes,
     connections,
     new TableDocumentService(db),
@@ -177,7 +182,7 @@ async function waitIdle() {
   );
 }
 
-async function analyzed(name = 'orders-api', input: { force?: boolean; depth?: 'fast' | 'medium' | 'full' } = {}) {
+async function analyzed(name = 'orders-api', input: { force?: boolean; depth?: 'fast' | 'medium' | 'full' | 'max' } = {}) {
   await service.run({ repos: [name], force: input.force ?? false, depth: input.depth ?? 'medium' });
   await waitIdle();
   const r = (await repos.findByName('acme', name))!;
@@ -298,7 +303,7 @@ describe('IntrospectionService — análise', () => {
     const doc = await db.get<{ path: string; content: string }>('SELECT path, content FROM documents WHERE id = ?', [d.documentId]);
     expect(doc?.path).toBe('github/acme/orders-api.md');
     expect(doc?.content).toContain('# orders-api (repositório acme/orders-api)');
-    expect(service.state()).toEqual({ running: false, queued: 0, current: null, done: 0, failed: 0 });
+    expect(service.state()).toEqual({ running: false, queued: 0, current: null, done: 0, failed: 0, progress: [] });
   });
 
   it('sem dependências nem runtime e com falhas das fontes públicas e do processo', async () => {
@@ -376,6 +381,28 @@ describe('IntrospectionService — análise', () => {
     expect((await original(r.id))?.status).toBe('pending');
   });
 
+  it('progresso: etapas da análise com contagem de arquivos e lotes do LLM', async () => {
+    llm = new FakeLlm(true, [new Error('sem crédito'), { modules: [], calls: [] }]);
+    build();
+    const seen: IntrospectionProgress[] = [];
+    const read = github.file.bind(github);
+    vi.spyOn(github, 'file').mockImplementation(async (...args) => {
+      seen.push(...service.state().progress);
+      return read(...args);
+    });
+    await analyzed('orders-api', { depth: 'full' });
+    const scanning = seen.filter((p) => p.stage === 'scanning');
+    expect(seen.map((p) => p.stage)).toContain('collecting');
+    expect(scanning.length).toBeGreaterThan(0);
+    expect(scanning.at(-1)).toMatchObject({ repo: 'orders-api', depth: 'full', total: expect.any(Number) });
+    expect(scanning.at(-1)!.done).toBeLessThanOrEqual(scanning.at(-1)!.total!);
+    // Mesma etapa mantém o início da etapa; a análise inteira mantém o início geral.
+    expect(new Set(scanning.map((p) => p.stageStartedAt)).size).toBe(1);
+    expect(new Set(seen.map((p) => p.startedAt)).size).toBe(1);
+    // Ao terminar, o progresso some.
+    expect(service.state().progress).toEqual([]);
+  });
+
   it('análise completa: varre o código e liga as chamadas aos destinos com os trechos', async () => {
     const d = await analyzed('orders-api', { depth: 'full' });
     expect(d.analysisDepth).toBe('full');
@@ -429,6 +456,44 @@ describe('IntrospectionService — aplicar no grafo', () => {
   beforeEach(async () => {
     await configure();
     await service.sync();
+  });
+
+  it('máxima: blocos de código, interfaces usadas e rotas expostas chegam ao grafo; reaplicar não duplica', async () => {
+    github.files.set(
+      'src/orders/orders.controller.ts',
+      ["@Controller('pedidos')", 'export class OrdersController {', '  @Post()', '  create(@Body() b) {', '    return this.s.create(b);', '  }', '}'].join(
+        '\n',
+      ),
+    );
+    const d = await analyzed('orders-api', { depth: 'max' });
+    expect(d.analysisDepth).toBe('max');
+    expect(d.analysis?.notes.find((n) => n.startsWith('Varredura'))).toContain('1 rota(s)/consumidor(es)/job(s) expostos');
+    const toQueue = d.proposal!.connections.find((c) => c.fromKey === 'mod:orders' && c.toKey === 'res:sqs:orders-queue')!;
+    expect(toQueue).toMatchObject({ interface: 'orders-queue' });
+    expect(toQueue.callSites![0]).toMatchObject({
+      file_path: 'src/orders/publisher.ts',
+      line: 4,
+      end_line: 5,
+      code: expect.stringContaining('SendMessageCommand'),
+    });
+    expect(d.proposal!.nodes.find((n) => n.key === 'mod:orders')?.interfaces).toEqual([
+      { name: 'POST /pedidos', type: 'http', description: null, spec: 'src/orders/orders.controller.ts:3-6 (create)' },
+    ]);
+
+    const result = await service.apply(d.id, 1);
+    expect(result.interfacesCreated).toBe(2);
+    const module = (await nodes.findByGraph(1)).find((n) => n.name === 'orders')!;
+    const queue = (await nodes.findByGraph(1)).find((n) => n.name === 'SQS orders-queue')!;
+    const exposed = await interfacesRepo.findByNodeAndName(module.id, 'POST /pedidos');
+    expect(exposed).toMatchObject({ type: 'http', spec: 'src/orders/orders.controller.ts:3-6 (create)' });
+    const used = await interfacesRepo.findByNodeAndName(queue.id, 'orders-queue');
+    const conn = await connections.findByEndpoints(module.id, queue.id, used!.id);
+    expect(conn).not.toBeNull();
+    const site = (await db.all<{ end_line: number; code: string }>('SELECT end_line, code FROM call_sites WHERE connection_id = ?', [conn!.id]))[0];
+    expect(site).toMatchObject({ end_line: 5, code: expect.stringContaining('SendMessageCommand') });
+
+    const again = await service.apply(d.id, 1);
+    expect(again).toMatchObject({ nodesCreated: 0, interfacesCreated: 0, connectionsCreated: 0 });
   });
 
   it('sem análise: 404', async () => {

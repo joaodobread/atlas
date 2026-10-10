@@ -5,7 +5,8 @@ export const PROTOCOLS = ['http', 'grpc', 'graphql', 'sql', 'nosql', 'amqp', 'ka
 export type Protocol = (typeof PROTOCOLS)[number];
 
 /** Profundidade da análise/geração: rápida (heurística), média (LLM) ou completa (LLM + trechos do código). */
-export const ANALYSIS_DEPTHS = ['fast', 'medium', 'full'] as const;
+/** Profundidade da análise: rápida (heurística), média (LLM), completa (LLM + chamadas do código) e máxima (todo o código, blocos inteiros, o que cada módulo expõe e usa). */
+export const ANALYSIS_DEPTHS = ['fast', 'medium', 'full', 'max'] as const;
 export type AnalysisDepth = (typeof ANALYSIS_DEPTHS)[number];
 
 export const ROLES = ['admin', 'editor', 'viewer'] as const;
@@ -37,3 +38,7 @@ export const KIND_LABEL: Record<NodeKind, string> = {
   external: 'Externo',
   module: 'Módulo',
 };
+
+/** Etapas da análise de um repositório, na ordem. */
+export const INTROSPECTION_STAGES = ['collecting', 'analyzing', 'scanning', 'mapping', 'scoring'] as const;
+export type IntrospectionStage = (typeof INTROSPECTION_STAGES)[number];
