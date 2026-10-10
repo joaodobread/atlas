@@ -30,6 +30,9 @@ docker compose -f containers/compose.yaml --profile deps --profile app up -d --b
 
 Abra http://localhost:3001 e crie o administrador. Funciona igual com `podman compose`.
 
+Para ver um exemplo pronto (uma loja virtual fictícia na AWS, como no print), importe
+[`examples/demo/loja-exemplo.json`](examples/demo/loja-exemplo.json) em _Importar/Exportar_.
+
 > **Antes de expor em produção:** troque as credenciais de exemplo do Postgres e do storage (`.env.example` e
 > `containers/compose.yaml`), defina um `APP_SECRET` próprio (32+ caracteres) e guarde-o junto com os backups — ele
 > cifra as configurações sensíveis. Veja [`containers/README.md`](containers/README.md) para RDS, TLS e buckets.
