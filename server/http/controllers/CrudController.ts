@@ -1,10 +1,10 @@
-import type { ZodType, ZodTypeDef } from 'zod';
+import type { ZodType } from 'zod';
 import { idParamSchema } from '../../../shared/schemas.ts';
 import type { ICrudService } from '../../services/contracts/index.ts';
 import type { HttpRequest } from '../HttpRequest.ts';
 import { created, noContent, ok, type HttpResponse } from '../HttpResponse.ts';
 
-type Schema<T> = ZodType<T, ZodTypeDef, unknown>;
+type Schema<T> = ZodType<T, unknown>;
 
 /** Controller CRUD genérico: valida a entrada com zod e delega ao service. */
 export abstract class CrudController<TEntity, TCreate, TUpdate> {
