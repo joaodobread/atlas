@@ -163,6 +163,7 @@ export const makeRepo = (id: number, o: Partial<RepoIntrospectionSummary> = {}):
   vulnerabilities: null,
   runtimeEol: null,
   attention: { level: 'ok', reasons: [] },
+  resumable: null,
   ...o,
 });
 

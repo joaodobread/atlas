@@ -103,6 +103,36 @@ describe('RestGithubClient', () => {
     ]);
   });
 
+  it('tree truncada (repositório grande): percorre pasta por pasta sem perder arquivos', async () => {
+    on(/\/git\/trees\/root\?recursive=1$/, () => json({ truncated: true, tree: [{ path: 'a.ts', type: 'blob', size: 1 }] }));
+    on(/\/git\/trees\/root$/, () =>
+      json({
+        tree: [
+          { path: 'a.ts', type: 'blob', size: 1, sha: 'x' },
+          { path: 'src', type: 'tree', sha: 's1' },
+        ],
+      }),
+    );
+    on(/\/git\/trees\/s1$/, () =>
+      json({
+        tree: [
+          { path: 'b.ts', type: 'blob', size: 2, sha: 'y' },
+          { path: 'deep', type: 'tree', sha: 's2' },
+          { path: 'semsha', type: 'tree' },
+        ],
+      }),
+    );
+    on(/\/git\/trees\/s2$/, () => json({ tree: [{ path: 'c.go', type: 'blob', size: 3, sha: 'z' }] }));
+    expect(await client.tree('acme', 'api', 'root', 'tok')).toEqual([
+      { path: 'a.ts', type: 'blob', size: 1 },
+      { path: 'src', type: 'tree', size: 0 },
+      { path: 'src/b.ts', type: 'blob', size: 2 },
+      { path: 'src/deep', type: 'tree', size: 0 },
+      { path: 'src/deep/c.go', type: 'blob', size: 3 },
+      { path: 'src/semsha', type: 'tree', size: 0 },
+    ]);
+  });
+
   it('file: texto cru, 404 = null, outros erros lançam', async () => {
     on(/\/contents\/dir\/my%20file\.ts\?ref=abc$/, () => new Response('conteúdo', { status: 200 }));
     on(/\/contents\/boom\.ts/, () => json({ message: 'Server Error' }, 500));

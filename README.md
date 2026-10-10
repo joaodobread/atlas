@@ -163,12 +163,15 @@ em [`integrations/github-action`](integrations/github-action/README.md), ou com 
   - **Média** (LLM): módulos, tudo com que o repositório se comunica e recursos descobertos no README/configurações;
   - **Completa** (LLM + varredura do código, consome muitos tokens): a média mais cada chamada externa (HTTP, banco,
     fila, cache, SDKs) com arquivo, linha e trecho de código, ligada ao destino no grafo;
-  - **Máxima** (LLM + todo o código, a mais cara e demorada): guarda o **bloco inteiro** (função/método) de cada chamada,
+  - **Máxima** (LLM + **todos** os arquivos de código, sem limite; a mais cara e demorada): guarda o **bloco inteiro** (função/método) de cada chamada,
     a **interface usada** no destino (endpoint, tabela, tópico, bucket) como conexão própria e o que cada módulo **expõe**
     (rotas HTTP, consumidores de fila/tópico, jobs) como interfaces do módulo, com arquivo e linhas do handler.
     Repositórios sem análise na profundidade pedida são (re)analisados antes; o grafo inclui as caixas de infra que os contêm.
 - Análises longas mostram o **progresso por etapa** (coleta, LLM, leitura do código, mapeamento, nota), com contador,
   barra e tempo decorrido, na janela "Gerar grafo" e na tela Repositórios.
+- A completa e a máxima **salvam o que já foi feito** (análise do LLM, arquivos lidos, lotes mapeados). Se pararem — falha do
+  LLM, sem crédito, limite do GitHub, servidor reiniciado — o repositório mostra onde parou e **Retomar** continua dali.
+  Erros transitórios do LLM (429, 5xx, timeout) são repetidos com espera antes de parar. Forçar ou commit novo recomeçam.
 - O botão de download da cena exporta o diagrama 2D inteiro em **PNG** ou **SVG** (vetor).
 
 ## Import/Export (para LLM)

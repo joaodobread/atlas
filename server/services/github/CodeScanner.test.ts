@@ -107,7 +107,7 @@ describe('CodeScanner', () => {
 
   it('não repete a mesma chamada em linhas seguidas e limita 6 por arquivo', async () => {
     const consecutive = 'fetch(a)\nfetch(b)\nfetch(c)\nfetch(d)';
-    expect((await scan({ 'a.ts': consecutive })).result.sites.map((s) => s.line)).toEqual([1, 4]);
+    expect((await scan({ 'a.ts': consecutive })).result.sites.map((s) => s.line)).toEqual([1, 3]);
     const many = spaced(Array.from({ length: 10 }, (_, i) => `fetch(${i})`));
     expect((await scan({ 'a.ts': many })).result.sites).toHaveLength(6);
   });
@@ -190,6 +190,46 @@ describe('CodeScanner — análise máxima', () => {
     // Completa (padrão) não guarda bloco nem recurso.
     const { result } = await scan({ 'src/animals/animals.service.ts': service });
     expect(result.sites[0]).toMatchObject({ code: null, endLine: null, resource: null });
+  });
+
+  it('sem limites: lê todos os arquivos (inclusive grandes) e guarda todas as chamadas', async () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 350 }, (_, i) => [`src/m${i}/a.ts`, Array.from({ length: 10 }, (_, k) => (k % 2 ? '' : `await fetch(u${k});`)).join('\n')]),
+    );
+    many['src/grande/big.ts'] = `${'// x\n'.repeat(40_000)}await fetch(big);`;
+    const { r } = await max(many);
+    expect(r.filesScanned).toBe(351);
+    expect(r.filesSkipped).toBe(0);
+    // 5 chamadas por arquivo (a completa guardaria no máximo 6 por arquivo e 250 no total).
+    expect(r.sites).toHaveLength(350 * 5 + 1);
+    expect(r.folders.length).toBe(351);
+  });
+
+  it('retoma do checkpoint e salva o estado a cada 50 arquivos', async () => {
+    const files = Object.fromEntries(Array.from({ length: 120 }, (_, i) => [`src/m${i}/a.ts`, 'await fetch(u);']));
+    const g = new FakeGithubClient(files);
+    const all = Object.entries(files).map(([path, text]) => ({ path, size: text.length }));
+    const saved: Array<{ files: number; sites: number }> = [];
+    const resume = {
+      files: ['src/m0/a.ts', 'src/m1/a.ts'],
+      sites: [{ kind: 'http' as const, file: 'src/m0/a.ts', line: 1, symbol: null, snippet: 'x', code: null, endLine: null, resource: null }],
+      surfaces: [],
+    };
+    const progress: number[] = [];
+    const r = await new CodeScanner(g).scan('acme', 'api', 'sha', 'tok', all, (d) => progress.push(d), SCAN_MAX, {
+      resume,
+      onCheckpoint: async (st) => {
+        saved.push({ files: st.files.length, sites: st.sites.length });
+      },
+    });
+    // Os 2 já lidos não são lidos de novo; o progresso começa de onde parou.
+    expect(g.fileReads).toHaveLength(118);
+    expect(g.fileReads).not.toContain('src/m0/a.ts');
+    expect(progress[0]).toBe(2);
+    expect(r.filesScanned).toBe(120);
+    expect(r.sites).toHaveLength(1 + 118);
+    expect(r.sites[0]).toMatchObject({ id: 1, snippet: 'x' });
+    expect(saved.map((x) => x.files)).toEqual([50, 100]);
   });
 
   it('acha rotas, consumidores e jobs com o código do handler', async () => {

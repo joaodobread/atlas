@@ -41,6 +41,14 @@ export function RepoDetailPanel({ vm, d }: { vm: ReposViewModel; d: RepoIntrospe
         {d.documentId && <button onClick={vm.openDocument}>Abrir documento</button>}
       </div>
       {d.error && <p className="field-error">{d.status === 'done' ? `Aviso: ${d.error}` : `Erro na última análise: ${d.error}`}</p>}
+      {vm.canResume(d) && (
+        <div className="row">
+          <button className="primary" disabled={vm.busy} onClick={() => void vm.resume(d)}>
+            Retomar análise
+          </button>
+          <span className="muted small">{vm.describeResumable(d.resumable!)}</span>
+        </div>
+      )}
 
       <section className="repo-section">
         <h4>Saúde</h4>

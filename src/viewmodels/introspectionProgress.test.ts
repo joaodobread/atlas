@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IntrospectionProgress } from '../../shared/types.ts';
-import { describeProgress, formatElapsed } from './introspectionProgress.ts';
+import { describeProgress, describeResumable, formatElapsed } from './introspectionProgress.ts';
 
 const NOW = Date.parse('2026-10-10T12:00:00Z');
 const p = (o: Partial<IntrospectionProgress> = {}): IntrospectionProgress => ({
@@ -45,5 +45,14 @@ describe('introspectionProgress', () => {
     });
     // Etapa fora da lista da profundidade (não deveria acontecer) cai na primeira posição.
     expect(describeProgress(p({ depth: 'fast', stage: 'scanning', done: 1, total: 2 }), NOW).label).toBe('Etapa 1 de 3 · Lendo o código');
+  });
+});
+
+describe('describeResumable', () => {
+  it('etapa com e sem contagem', () => {
+    const base = { depth: 'max' as const, updatedAt: 'x' };
+    expect(describeResumable({ ...base, stage: 'scanning', done: 1200, total: 5000 })).toBe('Parou em: Lendo o código · 1200/5000 arquivos');
+    expect(describeResumable({ ...base, stage: 'mapping', done: 0, total: null })).toBe('Parou em: Mapeando as chamadas com o LLM · 0 lotes');
+    expect(describeResumable({ ...base, stage: 'analyzing', done: null, total: null })).toBe('Parou em: Analisando com o LLM');
   });
 });

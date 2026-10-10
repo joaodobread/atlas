@@ -12,6 +12,7 @@ import { PgCallSiteRepository } from '../../repositories/postgres/PgCallSiteRepo
 import { PgConnectionRepository } from '../../repositories/postgres/PgConnectionRepository.ts';
 import { PgGraphRepository } from '../../repositories/postgres/PgGraphRepository.ts';
 import { PgInterfaceRepository } from '../../repositories/postgres/PgInterfaceRepository.ts';
+import { PgIntrospectionCheckpointRepository } from '../../repositories/postgres/PgIntrospectionCheckpointRepository.ts';
 import { InterfaceService } from '../InterfaceService.ts';
 import { PgNodeRepository } from '../../repositories/postgres/PgNodeRepository.ts';
 import { PgRepoIntrospectionRepository } from '../../repositories/postgres/PgRepoIntrospectionRepository.ts';
@@ -126,6 +127,7 @@ let metrics: PgRepoMetricsRepository;
 let nodes: PgNodeRepository;
 let connections: PgConnectionRepository;
 let interfacesRepo: PgInterfaceRepository;
+let checkpoints: PgIntrospectionCheckpointRepository;
 let collector: RepoCollector;
 let processCollector: ProcessCollector;
 let service: IntrospectionService;
@@ -151,7 +153,8 @@ function build() {
     new ActivityCollector(github),
     new RepoAnalyzer(llm),
     new CodeScanner(github),
-    new CodeMapper(llm),
+    // Sem espera real entre as tentativas do LLM.
+    new CodeMapper(llm, async () => {}),
     new QualityScorer(),
     intel,
     new GraphService(nodes, interfaces, connections, callSites),
@@ -160,6 +163,7 @@ function build() {
     new CallSiteService(callSites, connections, events),
     new InterfaceService(interfaces, nodes, events),
     interfaces,
+    (checkpoints = new PgIntrospectionCheckpointRepository(db)),
     nodes,
     connections,
     new TableDocumentService(db),
@@ -570,6 +574,104 @@ describe('IntrospectionService — aplicar no grafo', () => {
     ]);
     const res = await service.apply(d.id, 1);
     expect(res).toMatchObject({ nodesCreated: 1, connectionsCreated: 0 });
+  });
+});
+
+describe('IntrospectionService — retomar depois de uma falha', () => {
+  beforeEach(async () => {
+    await configure();
+    await service.sync();
+  });
+
+  /** Resposta válida da análise pelo LLM (máxima exige o LLM). */
+  const analysisOut = {
+    purpose: 'Pedidos',
+    stack: 'Node',
+    deploy: 'Docker',
+    inbound: [],
+    outbound: [],
+    data: [],
+    notes: [],
+    matchedNode: null,
+    resources: [{ name: 'orders-queue', kind: 'queue', tech: 'sqs', description: '' }],
+    connections: [],
+  };
+  const mappingOut = (calls: number[]) => ({
+    modules: [],
+    surfaces: [],
+    calls: calls.map((site) => ({ site, target: 'orders-queue', module: 'Pedidos', protocol: 'amqp', interface: 'orders-queue', description: 'publica' })),
+  });
+
+  it('máxima: falha no mapeamento guarda o checkpoint; retomar não repete análise nem varredura', async () => {
+    llm = new FakeLlm(true, [analysisOut, new Error('sem crédito')]);
+    build();
+    const failed = await analyzed('orders-api', { depth: 'max' });
+    expect(failed.status).toBe('error');
+    expect(failed.error).toMatch(/^Parou na etapa "mapeamento pelo LLM" \(0\/\d+\): sem crédito\. Use "Retomar" para continuar de onde parou\.$/);
+    expect(failed.resumable).toMatchObject({ depth: 'max', stage: 'mapping', done: 0 });
+    const saved = await checkpoints.get(failed.id);
+    expect(saved?.analyzed?.analysis.purpose).toBe('Pedidos');
+    expect(saved?.scanned?.sites.length).toBeGreaterThan(0);
+
+    // Retomar: só o lote que faltava vai ao LLM; nenhum arquivo é lido de novo.
+    llm = new FakeLlm(true, [mappingOut(saved!.scanned!.sites.map((x) => x.id))]);
+    build();
+    github.fileReads = [];
+    const done = await analyzed('orders-api', { depth: 'max' });
+    expect(done.status).toBe('done');
+    expect(llm.requests).toHaveLength(1);
+    // A coleta de fatos relê configurações; o código varrido não é lido de novo.
+    expect(github.fileReads).not.toContain('src/orders/publisher.ts');
+    expect(github.fileReads).not.toContain('src/payments/payflow.client.ts');
+    expect(done.resumable).toBeNull();
+    expect(await checkpoints.get(done.id)).toBeNull();
+    expect(done.proposal?.connections.some((c) => c.interface === 'orders-queue')).toBe(true);
+  });
+
+  it('máxima: falha do LLM na análise do repositório para (em vez de cair na heurística)', async () => {
+    llm = new FakeLlm(true, [new Error('chave inválida')]);
+    build();
+    const d = await analyzed('orders-api', { depth: 'max' });
+    expect(d.status).toBe('error');
+    expect(d.error).toBe('LLM falhou na análise do repositório: chave inválida');
+    expect(d.resumable).toBeNull();
+  });
+
+  it('forçar ou commit novo descartam o checkpoint e recomeçam', async () => {
+    llm = new FakeLlm(true, [analysisOut, new Error('sem crédito')]);
+    build();
+    const failed = await analyzed('orders-api', { depth: 'max' });
+    expect(failed.resumable).not.toBeNull();
+
+    // Commit novo: o checkpoint é de outro sha.
+    github.sha = 'b'.repeat(40);
+    llm = new FakeLlm(true, [analysisOut, new Error('de novo')]);
+    build();
+    const again = await analyzed('orders-api', { depth: 'max' });
+    expect(llm.requests).toHaveLength(2);
+    expect((await checkpoints.get(again.id))?.sha).toBe('b'.repeat(40));
+
+    // Forçar: recomeça mesmo com checkpoint válido.
+    llm = new FakeLlm(true, [analysisOut, mappingOut([])]);
+    build();
+    const forced = await analyzed('orders-api', { depth: 'max', force: true });
+    expect(llm.requests).toHaveLength(2);
+    expect(forced.status).toBe('done');
+  });
+
+  it('completa: checkpoint vale só para a mesma profundidade', async () => {
+    llm = new FakeLlm(true, [analysisOut, new Error('sem crédito')]);
+    build();
+    await analyzed('orders-api', { depth: 'max' });
+    const r = (await service.list())[0]!;
+    await checkpoints.save(r.id, { ...(await checkpoints.get(r.id))!, depth: 'full' });
+    llm = new FakeLlm(false);
+    build();
+    // Pede máxima, mas o salvo é da completa: recomeça do zero (sem LLM configurado, pela heurística).
+    const d = await analyzed('orders-api', { depth: 'max' });
+    expect(d.status).toBe('done');
+    expect(d.analysis?.method).toBe('heuristic');
+    expect(await checkpoints.get(r.id)).toBeNull();
   });
 });
 

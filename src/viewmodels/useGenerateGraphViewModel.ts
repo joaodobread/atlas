@@ -48,7 +48,7 @@ export function costWarning(depth: AnalysisDepth, repos: number): { title: strin
   if (depth === 'max')
     return {
       title: 'Atenção: a geração máxima é a mais cara e a mais demorada.',
-      body: `Para cada repositório o servidor lê todo o código (até 3.000 arquivos), envia o bloco inteiro de cada chamada ao LLM em lotes pequenos e ainda analisa cada rota, consumidor e job. Em repositórios grandes são dezenas a centenas de requisições: com ${repos} repositório(s) pode levar de minutos a mais de uma hora e custar várias vezes a completa. O progresso aparece aqui e na tela de repositórios.`,
+      body: `Para cada repositório o servidor lê TODOS os arquivos de código, sem limite, envia o bloco inteiro de cada chamada ao LLM em lotes pequenos e ainda analisa cada rota, consumidor e job. Em repositórios grandes são centenas de requisições: com ${repos} repositório(s) pode levar horas e custar muitas vezes a completa. O progresso aparece aqui e na tela de repositórios.`,
     };
   return null;
 }

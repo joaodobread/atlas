@@ -13,7 +13,7 @@ import { GithubApi } from '../data/api/GithubApi.ts';
 import { DocsSync } from '../data/DocsSync.ts';
 import { useGraphStore } from '../stores/graphStore.ts';
 import { useUiStore } from '../stores/uiStore.ts';
-import { describeProgress } from './introspectionProgress.ts';
+import { describeProgress, describeResumable } from './introspectionProgress.ts';
 import { useCommand } from './useCommand.ts';
 import { usePermissions } from './usePermissions.ts';
 
@@ -282,6 +282,16 @@ export function useReposViewModel() {
         setRepos(await api.sync());
         pushToast('success', 'Lista de repositórios atualizada');
       }),
+    /** Continua a análise interrompida de onde parou (mesma profundidade; o servidor usa o checkpoint). */
+    resume: (r: RepoIntrospectionSummary) =>
+      withBusy(async () => {
+        if (!r.resumable) return;
+        setState(await api.introspect({ repos: [r.name], depth: r.resumable.depth, force: false }));
+        setRepos(await api.repos());
+      }),
+    /** Pode oferecer "Retomar": há trabalho salvo e não está rodando. */
+    canResume: (r: RepoIntrospectionSummary) => perms.canEditGraph && r.resumable != null && r.status !== 'running' && r.status !== 'pending',
+    describeResumable,
     introspect: (onlyChecked: boolean) =>
       withBusy(async () => {
         setState(await api.introspect({ repos: onlyChecked ? [...checked] : undefined, force, depth: 'medium' }));

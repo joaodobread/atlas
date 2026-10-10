@@ -10,7 +10,7 @@ import type {
   RepoProcess,
   ScoreHistoryPoint,
 } from '../../../shared/types.ts';
-import type { AnalysisDepth } from '../../../shared/constants.ts';
+import type { AnalysisDepth, IntrospectionStage } from '../../../shared/constants.ts';
 import type { IDatabase } from '../../infra/database/IDatabase.ts';
 import type { IntrospectionOutcome, IRepoIntrospectionRepository, RepoMetadata } from '../contracts/IRepoIntrospectionRepository.ts';
 
@@ -37,6 +37,11 @@ interface Row {
   analysis_depth: AnalysisDepth | null;
   process_json: string | null;
   activity_json: string | null;
+  cp_depth: AnalysisDepth | null;
+  cp_stage: IntrospectionStage | null;
+  cp_done: number | null;
+  cp_total: number | null;
+  cp_updated_at: string | null;
   system_name: string | null;
   metrics_json: string | null;
   trend_json: string | null;
@@ -49,11 +54,13 @@ type Detail = Omit<RepoIntrospectionDetail, 'metrics' | 'history'>;
 /** Repositório + sistema (pai do nó ligado), métricas mais recentes e últimas notas. */
 const SELECT = `
   SELECT r.*, COALESCE(p.name, n.name) AS system_name,
+    cp.depth AS cp_depth, cp.stage AS cp_stage, cp.done AS cp_done, cp.total AS cp_total, cp.updated_at AS cp_updated_at,
     (SELECT data_json FROM repo_metrics m WHERE lower(m.owner) = lower(r.owner) AND lower(m.repo) = lower(r.name) ORDER BY m.id DESC LIMIT 1) AS metrics_json,
     (SELECT json_agg(score)::text FROM (SELECT score FROM repo_score_history h WHERE h.repo_id = r.id ORDER BY h.id DESC LIMIT 12) last) AS trend_json
   FROM repo_introspections r
   LEFT JOIN nodes n ON n.id = r.node_id
-  LEFT JOIN nodes p ON p.id = n.parent_id`;
+  LEFT JOIN nodes p ON p.id = n.parent_id
+  LEFT JOIN introspection_checkpoints cp ON cp.repo_id = r.id`;
 
 const json = <T>(text: string | null): T | null => (text ? (JSON.parse(text) as T) : null);
 
@@ -94,6 +101,10 @@ const summary = (r: Row): RepoIntrospectionSummary => {
     vulnerabilities,
     runtimeEol,
     attention: attentionOf({ archived: r.archived, pushedAt: r.pushed_at, activity, vulnerabilities, runtimeEol, score: r.score }),
+    resumable:
+      r.cp_depth && r.cp_stage && r.cp_updated_at
+        ? { depth: r.cp_depth, stage: r.cp_stage, done: r.cp_done, total: r.cp_total, updatedAt: r.cp_updated_at }
+        : null,
   };
 };
 

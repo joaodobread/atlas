@@ -87,6 +87,7 @@ describe('PgRepoIntrospectionRepository', () => {
       runtimeEol: null,
       // Fixture com push antigo: a saúde já aponta o repositório parado.
       attention: { level: 'attention', reasons: [expect.stringMatching(/^Sem commits há \d+ meses$/)] },
+      resumable: null,
       defaultBranch: 'main',
       facts: null,
       quality: null,
