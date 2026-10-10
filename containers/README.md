@@ -1,6 +1,6 @@
 # Containers
 
-Tudo de container do Comm Graph fica nesta pasta. Os arquivos seguem o padrão OCI/Compose e funcionam com
+Tudo de container do Atlas fica nesta pasta. Os arquivos seguem o padrão OCI/Compose e funcionam com
 `docker` e `podman` (`podman compose` / `podman build`).
 
 | Arquivo             | Para quê                                                                      |

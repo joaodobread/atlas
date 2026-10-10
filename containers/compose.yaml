@@ -1,4 +1,4 @@
-# Comm Graph — containers. Funciona com `docker compose` e `podman compose`.
+# Atlas — containers. Funciona com `docker compose` e `podman compose`.
 #
 # Dev (só as dependências; a app roda no host com `npm run dev`):
 #   docker compose -f containers/compose.yaml --profile deps up -d
@@ -9,7 +9,7 @@
 # Produção com serviços gerenciados (RDS/Aurora, S3, R2…): só a app; aponte as variáveis
 # DATABASE_URL / DATABASE_SSL e S3_* para os serviços externos (veja containers/README.md):
 #   docker compose -f containers/compose.yaml --profile app up -d --build
-name: comm-graph
+name: atlas
 
 x-app-env: &app-env
   PORT: 3001
@@ -74,7 +74,7 @@ services:
       dockerfile: containers/Containerfile
     # Para usar a imagem publicada: APP_IMAGE=ghcr.io/joaodobread/atlas:<versão>, `pull app` e depois `up --no-build`
     # (com `build:` definido, o `up` não baixa a imagem sozinho).
-    image: ${APP_IMAGE:-comm-graph:local}
+    image: ${APP_IMAGE:-atlas:local}
     environment: *app-env
     ports:
       - '${APP_PORT:-3001}:3001'

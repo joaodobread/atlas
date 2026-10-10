@@ -68,4 +68,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Build da imagem de produção
-        run: docker build -f containers/Containerfile -t comm-graph:ci .
+        run: docker build -f containers/Containerfile -t atlas:ci .
