@@ -14,6 +14,7 @@ import type { IGithubClient } from '../../infra/github/IGithubClient.ts';
 import type { IPackageIntel } from '../../infra/packages/IPackageIntel.ts';
 import type { IConnectionRepository } from '../../repositories/contracts/IConnectionRepository.ts';
 import type { IInterfaceRepository } from '../../repositories/contracts/IInterfaceRepository.ts';
+import type { IIntrospectionCheckpointRepository, IntrospectionCheckpoint } from '../../repositories/contracts/IIntrospectionCheckpointRepository.ts';
 import type { INodeRepository } from '../../repositories/contracts/INodeRepository.ts';
 import type { IRepoIntrospectionRepository } from '../../repositories/contracts/IRepoIntrospectionRepository.ts';
 import type { IRepoMetricsRepository } from '../../repositories/contracts/IRepoMetricsRepository.ts';
@@ -45,6 +46,13 @@ const DEPTH_RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2,
  */
 
 const ACTIVITY_CONCURRENCY = 6;
+const STAGE_LABEL: Record<IntrospectionStage, string> = {
+  collecting: 'coleta',
+  analyzing: 'análise pelo LLM',
+  scanning: 'leitura do código',
+  mapping: 'mapeamento pelo LLM',
+  scoring: 'nota e documento',
+};
 export class IntrospectionService implements IIntrospectionService {
   private queue: Array<{ id: number; force: boolean; depth: AnalysisDepth }> = [];
   /** Nome de cada repositório na fila (para o estado, sem ir ao banco). */
@@ -73,6 +81,7 @@ export class IntrospectionService implements IIntrospectionService {
     private readonly callSiteService: ICallSiteService,
     private readonly interfaceService: IInterfaceService,
     private readonly interfaces: IInterfaceRepository,
+    private readonly checkpoints: IIntrospectionCheckpointRepository,
     private readonly nodes: INodeRepository,
     private readonly connections: IConnectionRepository,
     private readonly documents: IDocumentService,
@@ -342,6 +351,8 @@ export class IntrospectionService implements IIntrospectionService {
       });
     };
     stage('collecting');
+    // Completa/máxima salvam o que já foi feito: uma falha não perde o trabalho e "Retomar" continua de onde parou.
+    let checkpoint: IntrospectionCheckpoint | null = null;
     try {
       const s = await this.settings.require();
       const sha = await this.github.headSha(repo.owner, repo.name, repo.defaultBranch ?? 'main', s.token);
@@ -354,6 +365,17 @@ export class IntrospectionService implements IIntrospectionService {
         this.counters.done++;
         return;
       }
+
+      const checkpointed = depth === 'full' || depth === 'max';
+      const saved = checkpointed && !force ? await this.checkpoints.get(id) : null;
+      // Só vale para o mesmo commit e a mesma profundidade; forçar ou commit novo recomeça do zero.
+      checkpoint = saved && saved.sha === sha && saved.depth === depth ? saved : null;
+      if (checkpointed && !checkpoint) await this.checkpoints.clear(id);
+      const save = async (patch: Partial<IntrospectionCheckpoint>) => {
+        checkpoint = { stage: 'collecting', done: null, total: null, ...checkpoint, ...patch, sha, depth };
+        await this.checkpoints.save(id, checkpoint);
+      };
+      const resume = checkpoint as IntrospectionCheckpoint | null;
 
       const collected = await this.collector.collect({
         owner: repo.owner,
@@ -383,7 +405,10 @@ export class IntrospectionService implements IIntrospectionService {
         graph: { nodes: graph.nodes, paths: paths(graph.nodes) },
       };
       stage('analyzing');
-      const analyzed = await this.analyzer.analyze(analyzerInput, depth);
+      const analyzed = resume?.analyzed ?? (await this.analyzer.analyze(analyzerInput, depth));
+      // Máxima não se contenta com a heurística: para (e pode ser retomada) se o LLM falhar.
+      if (depth === 'max' && analyzed.llmError) throw new Error(`LLM falhou na análise do repositório: ${analyzed.llmError}`);
+      if (checkpointed && !resume?.analyzed) await save({ stage: 'analyzing', analyzed });
       const { analysis } = analyzed;
       let proposal = analyzed.proposal;
       let llmError = analyzed.llmError;
@@ -393,17 +418,26 @@ export class IntrospectionService implements IIntrospectionService {
         // Máxima: todo o código, blocos inteiros, interfaces usadas e o que cada módulo expõe.
         const deep = depth === 'max';
         stage('scanning');
-        const scan = await this.scanner.scan(
-          repo.owner,
-          repo.name,
-          sha,
-          s.token,
-          deep ? collected.allCodeFiles : collected.sourceFiles,
-          (done, total) => stage('scanning', done, total),
-          deep ? SCAN_MAX : SCAN_FULL,
-        );
+        const total = () => this.progress.get(id)?.total ?? null;
+        const scan =
+          resume?.scanned ??
+          (await this.scanner.scan(
+            repo.owner,
+            repo.name,
+            sha,
+            s.token,
+            deep ? collected.allCodeFiles : collected.sourceFiles,
+            (done, all) => stage('scanning', done, all),
+            deep ? SCAN_MAX : SCAN_FULL,
+            { resume: resume?.scan, onCheckpoint: (state) => save({ stage: 'scanning', done: state.files.length, total: total(), scan: state }) },
+          ));
+        if (!resume?.scanned) await save({ stage: 'mapping', done: null, total: null, scan: undefined, scanned: scan });
         stage('mapping');
-        const mapped = await this.mapper.enrich(analyzerInput, proposal, scan, (done, total) => stage('mapping', done, total), deep);
+        const mapped = await this.mapper.enrich(analyzerInput, proposal, scan, (done, all) => stage('mapping', done, all), deep, {
+          resume: resume?.mapping,
+          onBatch: (state) => save({ stage: 'mapping', done: state.batchesDone, total: total(), mapping: state }),
+          strict: deep,
+        });
         proposal = mapped.proposal;
         analysis.notes.push(
           `Varredura do código: ${scan.filesScanned} arquivo(s) lidos, ${scan.sites.length} chamada(s) externa(s) encontrada(s)${deep ? `, ${scan.surfaces.length} rota(s)/consumidor(es)/job(s) expostos` : ''}${scan.filesSkipped ? `, ${scan.filesSkipped} arquivo(s) fora do limite` : ''}.`,
@@ -428,9 +462,21 @@ export class IntrospectionService implements IIntrospectionService {
       // Repositório já representado por um nó do grafo: liga na hora (sem precisar aplicar).
       const matched = proposal.nodes.find((n) => n.key === 'self')?.existingId;
       if (matched != null && repo.nodeId == null) await this.repos.linkNode(id, matched);
+      if (checkpointed) await this.checkpoints.clear(id);
       this.counters.done++;
     } catch (err) {
-      await this.repos.setStatus(id, 'error', err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      const cp = checkpoint as IntrospectionCheckpoint | null;
+      // Onde parou: o progresso ao vivo é mais preciso que o último checkpoint salvo.
+      const at = this.progress.get(id) ?? cp;
+      if (cp && at) await this.checkpoints.save(id, { ...cp, stage: at.stage, done: at.done, total: at.total }).catch(() => undefined);
+      await this.repos.setStatus(
+        id,
+        'error',
+        cp && at
+          ? `Parou na etapa "${STAGE_LABEL[at.stage]}"${at.done != null ? ` (${at.done}${at.total != null ? `/${at.total}` : ''})` : ''}: ${message}. Use "Retomar" para continuar de onde parou.`
+          : message,
+      );
       this.counters.failed++;
     }
   }

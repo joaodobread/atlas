@@ -1,4 +1,5 @@
 import type { IGithubClient } from '../../infra/github/IGithubClient.ts';
+import type { ScanCheckpoint } from '../../repositories/contracts/IIntrospectionCheckpointRepository.ts';
 import { redactSecrets } from './redactSecrets.ts';
 
 export type CallKind = 'http' | 'sql' | 'nosql' | 'queue' | 'cache' | 'storage' | 'sdk';
@@ -74,6 +75,15 @@ const CONCURRENCY = 8;
 const MAX_BLOCK_LINES = 150;
 const BLOCK_WINDOW = 40;
 const MAX_CODE_CHARS = 20_000;
+/** Salva o estado da varredura a cada tantos arquivos (para retomar depois de uma falha). */
+const CHECKPOINT_EVERY = 50;
+
+export interface ScanHooks {
+  /** Estado salvo de uma varredura interrompida. */
+  resume?: ScanCheckpoint;
+  /** Chamado a cada {@link CHECKPOINT_EVERY} arquivos com o estado atual. */
+  onCheckpoint?: (state: ScanCheckpoint) => Promise<void>;
+}
 
 /** Padrões de chamada para fora do processo, por tipo. Ordem importa: o primeiro que casar define o tipo. */
 const PATTERNS: Array<[CallKind, RegExp]> = [
@@ -118,6 +128,7 @@ export class CodeScanner {
     files: Array<{ path: string; size: number }>,
     onProgress?: (done: number, total: number) => void,
     options: ScanOptions = SCAN_FULL,
+    hooks: ScanHooks = {},
   ): Promise<CodeScanResult> {
     const candidates = files.filter((f) => f.size > 0 && f.size <= options.maxFileSize);
     // Prioriza caminhos com cara de integração (clients, adapters, repositories…).
@@ -125,28 +136,42 @@ export class CodeScanner {
       /(client|adapter|gateway|repositor|provider|integration|infra|service|queue|publisher|consumer|handler|dao|store|controller|route)/i.test(p) ? 0 : 1;
     const chosen = [...candidates].sort((a, b) => score(a.path) - score(b.path) || a.path.length - b.path.length).slice(0, options.maxFiles);
 
-    const sites: Array<Omit<CodeCallSite, 'id'>> = [];
-    const surfaces: Array<Omit<CodeSurface, 'id'>> = [];
+    // Retomando: continua dos arquivos que faltam, com o que já foi encontrado.
+    const already = new Set(hooks.resume?.files ?? []);
+    const sites: Array<Omit<CodeCallSite, 'id'>> = [...(hooks.resume?.sites ?? [])];
+    const surfaces: Array<Omit<CodeSurface, 'id'>> = [...(hooks.resume?.surfaces ?? [])];
+    const doneFiles = chosen.filter((f) => already.has(f.path)).map((f) => f.path);
+    const todo = chosen.filter((f) => !already.has(f.path));
     let next = 0;
-    let read = 0;
-    onProgress?.(0, chosen.length);
+    let read = doneFiles.length;
+    let saving = Promise.resolve();
+    const checkpoint = () => {
+      const snapshot = { files: [...doneFiles], sites: [...sites], surfaces: [...surfaces] };
+      saving = saving.then(() => hooks.onCheckpoint!(snapshot));
+    };
+    onProgress?.(read, chosen.length);
     await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, chosen.length) }, async () => {
-        while (next < chosen.length && sites.length < options.maxSites) {
-          const file = chosen[next++]!;
+      Array.from({ length: Math.min(CONCURRENCY, todo.length) }, async () => {
+        while (next < todo.length && sites.length < options.maxSites) {
+          const file = todo[next++]!;
           const text = await this.github.file(owner, repo, sha, file.path, token).catch(() => null);
           if (text) {
             sites.push(...findSites(file.path, text, options));
             if (options.surfaces) surfaces.push(...findSurfaces(file.path, text));
           }
-          onProgress?.(++read, chosen.length);
+          doneFiles.push(file.path);
+          // Fora da chamada: com `?.` e sem callback, o `++` nem seria avaliado.
+          read++;
+          onProgress?.(read, chosen.length);
+          if (hooks.onCheckpoint && read % CHECKPOINT_EVERY === 0) checkpoint();
         }
       }),
     );
+    await saving;
     const folders = [...new Set(chosen.map((f) => topFolder(f.path)).filter((x): x is string => !!x))].slice(0, options.surfaces ? Infinity : 40);
     return {
-      filesScanned: Math.min(next, chosen.length),
-      filesSkipped: files.length - Math.min(next, chosen.length),
+      filesScanned: read,
+      filesSkipped: files.length - read,
       sites: sites.slice(0, options.maxSites).map((s, i) => ({ ...s, id: i + 1 })),
       surfaces: surfaces.map((s, i) => ({ ...s, id: i + 1 })),
       folders,

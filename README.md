@@ -169,6 +169,9 @@ em [`integrations/github-action`](integrations/github-action/README.md), ou com 
     Repositórios sem análise na profundidade pedida são (re)analisados antes; o grafo inclui as caixas de infra que os contêm.
 - Análises longas mostram o **progresso por etapa** (coleta, LLM, leitura do código, mapeamento, nota), com contador,
   barra e tempo decorrido, na janela "Gerar grafo" e na tela Repositórios.
+- A completa e a máxima **salvam o que já foi feito** (análise do LLM, arquivos lidos, lotes mapeados). Se pararem — falha do
+  LLM, sem crédito, limite do GitHub, servidor reiniciado — o repositório mostra onde parou e **Retomar** continua dali.
+  Erros transitórios do LLM (429, 5xx, timeout) são repetidos com espera antes de parar. Forçar ou commit novo recomeçam.
 - O botão de download da cena exporta o diagrama 2D inteiro em **PNG** ou **SVG** (vetor).
 
 ## Import/Export (para LLM)

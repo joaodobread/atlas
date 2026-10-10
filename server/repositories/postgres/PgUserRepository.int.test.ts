@@ -84,7 +84,8 @@ describe('PgSessionRepository', () => {
   });
 
   const future = () => new Date(Date.now() + 3_600_000);
-  const past = () => new Date(Date.now() - 1000);
+  // Folga de 1h: o relógio do container do Postgres pode estar alguns segundos atrás do host.
+  const past = () => new Date(Date.now() - 3_600_000);
 
   it('findValid só acha sessão não expirada', async () => {
     const exp = future();

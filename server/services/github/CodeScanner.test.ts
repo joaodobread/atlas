@@ -205,6 +205,33 @@ describe('CodeScanner — análise máxima', () => {
     expect(r.folders.length).toBe(351);
   });
 
+  it('retoma do checkpoint e salva o estado a cada 50 arquivos', async () => {
+    const files = Object.fromEntries(Array.from({ length: 120 }, (_, i) => [`src/m${i}/a.ts`, 'await fetch(u);']));
+    const g = new FakeGithubClient(files);
+    const all = Object.entries(files).map(([path, text]) => ({ path, size: text.length }));
+    const saved: Array<{ files: number; sites: number }> = [];
+    const resume = {
+      files: ['src/m0/a.ts', 'src/m1/a.ts'],
+      sites: [{ kind: 'http' as const, file: 'src/m0/a.ts', line: 1, symbol: null, snippet: 'x', code: null, endLine: null, resource: null }],
+      surfaces: [],
+    };
+    const progress: number[] = [];
+    const r = await new CodeScanner(g).scan('acme', 'api', 'sha', 'tok', all, (d) => progress.push(d), SCAN_MAX, {
+      resume,
+      onCheckpoint: async (st) => {
+        saved.push({ files: st.files.length, sites: st.sites.length });
+      },
+    });
+    // Os 2 já lidos não são lidos de novo; o progresso começa de onde parou.
+    expect(g.fileReads).toHaveLength(118);
+    expect(g.fileReads).not.toContain('src/m0/a.ts');
+    expect(progress[0]).toBe(2);
+    expect(r.filesScanned).toBe(120);
+    expect(r.sites).toHaveLength(1 + 118);
+    expect(r.sites[0]).toMatchObject({ id: 1, snippet: 'x' });
+    expect(saved.map((x) => x.files)).toEqual([50, 100]);
+  });
+
   it('acha rotas, consumidores e jobs com o código do handler', async () => {
     const nest = [
       "@Controller('pedidos')",

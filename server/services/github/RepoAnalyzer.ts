@@ -1,6 +1,7 @@
 import type { GraphNode, ProposalNode, RepoAnalysis, RepoGraphProposal } from '../../../shared/types.ts';
 import type { AnalysisDepth } from '../../../shared/constants.ts';
 import { codeMappingSchema, repoAnalysisSchema, type CodeMappingOutput, type RepoAnalysisOutput } from '../../../shared/schemas.ts';
+import type { MappingCheckpoint } from '../../repositories/contracts/IIntrospectionCheckpointRepository.ts';
 import type { CallKind, CodeCallSite, CodeScanResult, CodeSurface } from './CodeScanner.ts';
 import { topFolder } from './CodeScanner.ts';
 import type { ILlmProvider } from '../../infra/llm/ILlmProvider.ts';
@@ -98,8 +99,25 @@ export class RepoAnalyzer {
 }
 
 /** Análise completa: transforma as chamadas encontradas no código em módulos e conexões com os trechos. */
+export interface MappingHooks {
+  /** Lotes já respondidos numa execução interrompida. */
+  resume?: MappingCheckpoint;
+  /** Chamado depois de cada lote respondido, com o estado acumulado. */
+  onBatch?: (state: MappingCheckpoint) => Promise<void>;
+  /** Falha do LLM interrompe (para retomar depois) em vez de cair na heurística. */
+  strict?: boolean;
+}
+
+/** Erros que costumam passar sozinhos: limite de taxa, sobrecarga, 5xx, rede. */
+const TRANSIENT = /\b(429|5\d\d)\b|rate.?limit|overload|timed? ?out|ECONNRESET|ETIMEDOUT|EAI_AGAIN|fetch failed|socket hang up/i;
+/** Esperas entre as tentativas de um lote (ms). */
+const RETRY_DELAYS = [2_000, 8_000, 20_000];
+
 export class CodeMapper {
-  constructor(private readonly llm: ILlmProvider) {}
+  constructor(
+    private readonly llm: ILlmProvider,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  ) {}
 
   /** `onProgress(lotes, total)` a cada lote enviado ao LLM (para a barra de progresso). */
   async enrich(
@@ -109,14 +127,16 @@ export class CodeMapper {
     onProgress?: (done: number, total: number) => void,
     /** Análise máxima: blocos inteiros ao LLM, interfaces usadas e o que cada módulo expõe. */
     deep = false,
+    hooks: MappingHooks = {},
   ): Promise<{ proposal: RepoGraphProposal; llmError: string | null }> {
     if (!scan.sites.length && !scan.surfaces.length) return { proposal, llmError: null };
     let mapping: CodeMappingOutput;
     let llmError: string | null = null;
     if (this.llm.configured) {
       try {
-        mapping = await this.mapWithLlm(input, proposal, scan, onProgress, deep);
+        mapping = await this.mapWithLlm(input, proposal, scan, onProgress, deep, hooks);
       } catch (err) {
+        if (hooks.strict) throw err;
         llmError = err instanceof Error ? err.message : String(err);
         mapping = heuristicMapping(proposal, scan);
       }
@@ -124,43 +144,48 @@ export class CodeMapper {
     return { proposal: applyMapping(input, proposal, scan, mapping, deep), llmError };
   }
 
+  /** Repete o lote em erros transitórios (com espera crescente) antes de desistir. */
+  private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (attempt >= RETRY_DELAYS.length || !TRANSIENT.test(message)) throw err;
+        await this.sleep(RETRY_DELAYS[attempt]!);
+      }
+    }
+  }
+
   private async mapWithLlm(
     input: AnalyzerInput,
     proposal: RepoGraphProposal,
     scan: CodeScanResult,
-    onProgress?: (done: number, total: number) => void,
-    deep = false,
+    onProgress: ((done: number, total: number) => void) | undefined,
+    deep: boolean,
+    hooks: MappingHooks,
   ): Promise<CodeMappingOutput> {
     const targets = [
       ...proposal.nodes.filter((n) => n.key !== GROUP_KEY && n.key !== SELF_KEY).map((n) => `- ${n.name} [${n.kind}]`),
       ...input.graph.nodes.slice(0, 250).map((n) => `- ${input.graph.paths.get(n.id)} [${n.kind}]`),
     ];
-    const out: CodeMappingOutput = { modules: [], calls: [], surfaces: [] };
-    const size = deep ? BATCH_DEEP : BATCH;
-    const siteBatches = Math.ceil(scan.sites.length / size);
-    const surfaceBatches = deep ? Math.ceil(scan.surfaces.length / SURFACE_BATCH) : 0;
-    const total = siteBatches + surfaceBatches;
-    let done = 0;
-    onProgress?.(0, total);
     const header = `Repositório ${input.owner}/${input.name}
 Pastas: ${scan.folders.join(', ')}
 
 ## Destinos possíveis
 ${targets.join('\n')}`;
-    const merge = (res: CodeMappingOutput) => {
-      out.calls.push(...res.calls);
-      out.surfaces.push(...res.surfaces);
-      for (const m of res.modules) if (!out.modules.some((x) => norm(x.name) === norm(m.name))) out.modules.push(m);
-      onProgress?.(++done, total);
-    };
+    const describe = (c: CodeCallSite) =>
+      deep
+        ? `### site ${c.id} (${c.kind}) ${c.file}:${c.line}${c.endLine ? `-${c.endLine}` : ''}${c.symbol ? ` em ${c.symbol}` : ''}${c.resource ? ` — recurso: ${c.resource}` : ''}\n${(c.code ?? c.snippet).slice(0, DEEP_CODE_CHARS)}`
+        : `### site ${c.id} (${c.kind}) ${c.file}:${c.line}${c.symbol ? ` em ${c.symbol}` : ''}\n${c.snippet}`;
+
+    // Lista fixa de lotes (chamadas e depois o que é exposto): retomar = pular os já respondidos.
+    const size = deep ? BATCH_DEEP : BATCH;
+    const batches: Array<() => Promise<CodeMappingOutput>> = [];
     for (let i = 0; i < scan.sites.length; i += size) {
       const batch = scan.sites.slice(i, i + size);
-      const describe = (c: CodeCallSite) =>
-        deep
-          ? `### site ${c.id} (${c.kind}) ${c.file}:${c.line}${c.endLine ? `-${c.endLine}` : ''}${c.symbol ? ` em ${c.symbol}` : ''}${c.resource ? ` — recurso: ${c.resource}` : ''}\n${(c.code ?? c.snippet).slice(0, DEEP_CODE_CHARS)}`
-          : `### site ${c.id} (${c.kind}) ${c.file}:${c.line}${c.symbol ? ` em ${c.symbol}` : ''}\n${c.snippet}`;
-      merge(
-        await this.llm.completeJson(
+      batches.push(() =>
+        this.llm.completeJson(
           {
             system: deep ? SYSTEM_DEEP : SYSTEM_MAPPING,
             messages: [{ role: 'user', content: `${header}\n\n## Chamadas\n${batch.map(describe).join('\n\n')}` }],
@@ -176,26 +201,31 @@ ${targets.join('\n')}`;
     }
     for (let i = 0; deep && i < scan.surfaces.length; i += SURFACE_BATCH) {
       const batch = scan.surfaces.slice(i, i + SURFACE_BATCH);
-      merge(
-        await this.llm.completeJson(
-          {
-            system: SYSTEM_SURFACES,
-            messages: [
-              {
-                role: 'user',
-                content: `${header}\n\n## O que o código expõe\n${batch
-                  .map(
-                    (x) =>
-                      `### surface ${x.id} (${x.kind}) ${x.name} — ${x.file}:${x.line}${x.endLine ? `-${x.endLine}` : ''}\n${(x.code ?? '').slice(0, DEEP_CODE_CHARS / 2)}`,
-                  )
-                  .join('\n\n')}`,
-              },
-            ],
-            maxTokens: 8000,
-          },
+      const body = batch
+        .map(
+          (x) =>
+            `### surface ${x.id} (${x.kind}) ${x.name} — ${x.file}:${x.line}${x.endLine ? `-${x.endLine}` : ''}\n${(x.code ?? '').slice(0, DEEP_CODE_CHARS / 2)}`,
+        )
+        .join('\n\n');
+      batches.push(() =>
+        this.llm.completeJson(
+          { system: SYSTEM_SURFACES, messages: [{ role: 'user', content: `${header}\n\n## O que o código expõe\n${body}` }], maxTokens: 8000 },
           { name: 'code_mapping', schema: CODE_MAPPING_DEEP_JSON_SCHEMA, parse: (v) => codeMappingSchema.parse(v) },
         ),
       );
+    }
+
+    const out: CodeMappingOutput = hooks.resume ? structuredClone(hooks.resume.output) : { modules: [], calls: [], surfaces: [] };
+    let done = Math.min(hooks.resume?.batchesDone ?? 0, batches.length);
+    onProgress?.(done, batches.length);
+    for (; done < batches.length;) {
+      const res = await this.withRetry(batches[done]!);
+      out.calls.push(...res.calls);
+      out.surfaces.push(...res.surfaces);
+      for (const m of res.modules) if (!out.modules.some((x) => norm(x.name) === norm(m.name))) out.modules.push(m);
+      done++;
+      await hooks.onBatch?.({ output: out, batchesDone: done });
+      onProgress?.(done, batches.length);
     }
     return out;
   }

@@ -56,6 +56,7 @@ import { RestGithubClient } from '../infra/github/RestGithubClient.ts';
 import { PublicPackageIntel } from '../infra/packages/PublicPackageIntel.ts';
 import { PgRepoIntrospectionRepository } from '../repositories/postgres/PgRepoIntrospectionRepository.ts';
 import { PgRepoMetricsRepository } from '../repositories/postgres/PgRepoMetricsRepository.ts';
+import { PgIntrospectionCheckpointRepository } from '../repositories/postgres/PgIntrospectionCheckpointRepository.ts';
 import { GithubSettingsService } from '../services/github/GithubSettingsService.ts';
 import { IntrospectionService } from '../services/github/IntrospectionService.ts';
 import { QualityScorer } from '../services/github/QualityScorer.ts';
@@ -257,6 +258,7 @@ export function buildContainer(config: AppConfig): Container {
   c.singleton(TOKENS.PackageIntel, () => new PublicPackageIntel());
   c.singleton(TOKENS.RepoIntrospectionRepository, (r) => new PgRepoIntrospectionRepository(r.resolve(TOKENS.Database)));
   c.singleton(TOKENS.RepoMetricsRepository, (r) => new PgRepoMetricsRepository(r.resolve(TOKENS.Database)));
+  c.singleton(TOKENS.IntrospectionCheckpointRepository, (r) => new PgIntrospectionCheckpointRepository(r.resolve(TOKENS.Database)));
   c.singleton(TOKENS.GithubSettingsService, (r) => new GithubSettingsService(r.resolve(TOKENS.SecureSettings), r.resolve(TOKENS.GithubClient)));
   c.singleton(TOKENS.RepoCollector, (r) => new RepoCollector(r.resolve(TOKENS.GithubClient)));
   c.singleton(TOKENS.ProcessCollector, (r) => new ProcessCollector(r.resolve(TOKENS.GithubClient)));
@@ -287,6 +289,7 @@ export function buildContainer(config: AppConfig): Container {
         r.resolve(TOKENS.CallSiteService),
         r.resolve(TOKENS.InterfaceService),
         r.resolve(TOKENS.InterfaceRepository),
+        r.resolve(TOKENS.IntrospectionCheckpointRepository),
         r.resolve(TOKENS.NodeRepository),
         r.resolve(TOKENS.ConnectionRepository),
         r.resolve(TOKENS.DocumentService),

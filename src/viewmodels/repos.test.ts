@@ -171,6 +171,24 @@ describe('useReposViewModel', () => {
     expect(result.current.allChecked).toBe(false);
   });
 
+  it('retomar: oferece só com trabalho salvo e fora de execução; reenvia na mesma profundidade', async () => {
+    setPermissions('graph:write');
+    const resumable = { depth: 'max' as const, stage: 'mapping' as const, done: 3, total: 10, updatedAt: 'x' };
+    const stopped = makeRepo(9, { name: 'grande', status: 'error', resumable });
+    const introspect = vi.spyOn(api, 'introspect').mockResolvedValue(idle);
+    const { result } = mount([stopped, makeRepo(8, { name: 'rodando', status: 'running', resumable }), makeRepo(7, { name: 'sem' })]);
+    await waitFor(() => expect(result.current.visibleCount).toBe(3));
+    expect(result.current.canResume(stopped)).toBe(true);
+    expect(result.current.canResume(makeRepo(8, { status: 'running', resumable }))).toBe(false);
+    expect(result.current.canResume(makeRepo(8, { status: 'pending', resumable }))).toBe(false);
+    expect(result.current.canResume(makeRepo(7))).toBe(false);
+    expect(result.current.describeResumable(resumable)).toBe('Parou em: Mapeando as chamadas com o LLM · 3/10 lotes');
+    await act(() => result.current.resume(stopped));
+    expect(introspect).toHaveBeenCalledWith({ repos: ['grande'], depth: 'max', force: false });
+    await act(() => result.current.resume(makeRepo(7)));
+    expect(introspect).toHaveBeenCalledTimes(1);
+  });
+
   it('rótulos de idade e cor pelo tempo parado', () => {
     const now = Date.parse('2026-10-10T00:00:00Z');
     const ago = (d: number) => new Date(now - d * 24 * 3600 * 1000).toISOString();

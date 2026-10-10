@@ -262,4 +262,21 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE call_sites ADD COLUMN end_line integer, ADD COLUMN code text;
     `,
   },
+  {
+    version: 5,
+    name: 'checkpoints das análises (retomar depois de uma falha)',
+    sql: `
+      -- Um por repositório: o que já foi feito na análise em andamento/interrompida (some ao concluir).
+      CREATE TABLE introspection_checkpoints (
+        repo_id    integer PRIMARY KEY REFERENCES repo_introspections(id) ON DELETE CASCADE,
+        sha        text NOT NULL,
+        depth      text NOT NULL,
+        stage      text NOT NULL,
+        done       integer,
+        total      integer,
+        data_json  text NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    `,
+  },
 ];

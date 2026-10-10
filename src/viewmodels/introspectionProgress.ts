@@ -1,5 +1,5 @@
 import type { AnalysisDepth, IntrospectionStage } from '../../shared/constants.ts';
-import type { IntrospectionProgress } from '../../shared/types.ts';
+import type { IntrospectionProgress, ResumableAnalysis } from '../../shared/types.ts';
 
 /** Etapas por profundidade: rápida e média não leem o código. */
 const STAGES: Record<AnalysisDepth, IntrospectionStage[]> = {
@@ -53,4 +53,10 @@ export function describeProgress(p: IntrospectionProgress, now = Date.now()): Pr
     percent: counted ? Math.min(100, Math.round((p.done! / p.total!) * 100)) : null,
     elapsed: formatElapsed(now - Date.parse(p.startedAt)),
   };
+}
+
+/** "Parou em: Lendo o código · 1200/5000 arquivos" (para o botão Retomar). */
+export function describeResumable(r: ResumableAnalysis): string {
+  const counter = r.done != null ? ` · ${r.done}${r.total != null ? `/${r.total}` : ''} ${UNIT[r.stage] ?? ''}`.trimEnd() : '';
+  return `Parou em: ${LABEL[r.stage]}${counter}`;
 }

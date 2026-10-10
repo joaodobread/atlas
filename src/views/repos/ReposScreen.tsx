@@ -224,6 +224,19 @@ export function ReposScreen() {
                             {r.status === 'error' ? 'Erro' : 'Aviso'}: {r.error}
                           </span>
                         )}
+                        {vm.canResume(r) && (
+                          <button
+                            className="link small"
+                            disabled={vm.busy}
+                            title={vm.describeResumable(r.resumable!)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void vm.resume(r);
+                            }}
+                          >
+                            ↻ Retomar
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td>

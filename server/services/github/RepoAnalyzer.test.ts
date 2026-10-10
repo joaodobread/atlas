@@ -621,3 +621,76 @@ describe('CodeMapper — análise máxima', () => {
     expect(res.proposal.nodes.some((n) => n.key === 'mod:x')).toBe(false);
   });
 });
+
+describe('CodeMapper — retomar, tentar de novo e parar', () => {
+  const proposal = (): RepoGraphProposal => ({
+    nodes: [
+      { key: 'self', existingId: null, name: 'orders-api', kind: 'service', tech: null, description: null, parentKey: null },
+      { key: 'res:q', existingId: null, name: 'Fila', kind: 'queue', tech: 'sqs', description: null, parentKey: null },
+    ],
+    connections: [],
+  });
+  const site = (id: number): CodeCallSite => ({
+    id,
+    kind: 'queue',
+    file: 'src/orders/a.ts',
+    line: id,
+    symbol: null,
+    snippet: 's',
+    code: 'c',
+    endLine: id,
+    resource: 'pedidos',
+  });
+  const scan = (n: number): CodeScanResult => ({
+    filesScanned: 1,
+    filesSkipped: 0,
+    sites: Array.from({ length: n }, (_, i) => site(i + 1)),
+    surfaces: [],
+    folders: [],
+  });
+  const out = (ids: number[]) => ({
+    modules: [],
+    surfaces: [],
+    calls: ids.map((s) => ({ site: s, target: 'Fila', module: 'Pedidos', protocol: 'amqp' as const, interface: null, description: null })),
+  });
+
+  it('erro transitório: espera e tenta de novo (até 3 vezes)', async () => {
+    const waits: number[] = [];
+    const llm = new FakeLlm(true, [new Error('LLM respondeu 429'), new Error('overloaded'), out([1])]);
+    const res = await new CodeMapper(llm, async (ms) => void waits.push(ms)).enrich(input(), proposal(), scan(1), undefined, true, { strict: true });
+    expect(waits).toEqual([2000, 8000]);
+    expect(res.proposal.connections).toHaveLength(1);
+    const giveUp = new FakeLlm(true, [new Error('500'), new Error('500'), new Error('500'), new Error('500 de novo')]);
+    await expect(new CodeMapper(giveUp, async () => {}).enrich(input(), proposal(), scan(1), undefined, true, { strict: true })).rejects.toThrow('500 de novo');
+  });
+
+  it('erro definitivo: estrito interrompe; sem estrito cai na heurística', async () => {
+    await expect(
+      new CodeMapper(new FakeLlm(true, [new Error('sem crédito')]), async () => {}).enrich(input(), proposal(), scan(1), undefined, true, { strict: true }),
+    ).rejects.toThrow('sem crédito');
+    const soft = await new CodeMapper(new FakeLlm(true, [new Error('sem crédito')]), async () => {}).enrich(input(), proposal(), scan(1), undefined, true);
+    expect(soft.llmError).toBe('sem crédito');
+  });
+
+  it('retoma pulando os lotes já respondidos e avisa cada lote concluído', async () => {
+    const llm = new FakeLlm(true, [out([16])]);
+    const states: number[] = [];
+    const progress: Array<[number, number]> = [];
+    const res = await new CodeMapper(llm, async () => {}).enrich(input(), proposal(), scan(16), (d, t) => progress.push([d, t]), true, {
+      resume: {
+        output: { ...out(Array.from({ length: 15 }, (_, i) => i + 1)), modules: [{ name: 'Pedidos', path: 'src/orders', description: '' }] },
+        batchesDone: 1,
+      },
+      onBatch: async (st) => void states.push(st.batchesDone),
+      strict: true,
+    });
+    expect(llm.requests).toHaveLength(1);
+    expect(llm.requests[0]!.messages[0]!.content).toContain('### site 16 ');
+    expect(states).toEqual([2]);
+    expect(progress).toEqual([
+      [1, 2],
+      [2, 2],
+    ]);
+    expect(res.proposal.connections[0]!.callSites).toHaveLength(16);
+  });
+});

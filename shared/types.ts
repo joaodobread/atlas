@@ -400,6 +400,14 @@ export interface RepoActivity {
 
 export type AttentionLevel = 'ok' | 'watch' | 'attention';
 
+export interface ResumableAnalysis {
+  depth: AnalysisDepth;
+  stage: IntrospectionStage;
+  done: number | null;
+  total: number | null;
+  updatedAt: string;
+}
+
 export interface RepoAttention {
   level: AttentionLevel;
   reasons: string[];
@@ -559,6 +567,8 @@ export interface RepoIntrospectionSummary {
   runtimeEol: boolean | null;
   /** Precisa de atenção? Calculado em `shared/repoHealth.ts`. */
   attention: RepoAttention;
+  /** Análise completa/máxima interrompida (ou em andamento) com trabalho salvo: dá para retomar. */
+  resumable: ResumableAnalysis | null;
 }
 
 export interface RepoIntrospectionDetail extends RepoIntrospectionSummary {

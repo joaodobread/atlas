@@ -47,6 +47,7 @@ import type { IGithubClient } from '../infra/github/IGithubClient.ts';
 import type { IPackageIntel } from '../infra/packages/IPackageIntel.ts';
 import type { IRepoIntrospectionRepository } from '../repositories/contracts/IRepoIntrospectionRepository.ts';
 import type { IRepoMetricsRepository } from '../repositories/contracts/IRepoMetricsRepository.ts';
+import type { IIntrospectionCheckpointRepository } from '../repositories/contracts/IIntrospectionCheckpointRepository.ts';
 import type { IGithubSettingsService, IIntrospectionService, IMetricsService } from '../services/contracts/index.ts';
 import type { RepoCollector } from '../services/github/RepoCollector.ts';
 import type { ProcessCollector } from '../services/github/ProcessCollector.ts';
@@ -91,6 +92,7 @@ export const TOKENS = {
   PackageIntel: new Token<IPackageIntel>('PackageIntel'),
   RepoIntrospectionRepository: new Token<IRepoIntrospectionRepository>('RepoIntrospectionRepository'),
   RepoMetricsRepository: new Token<IRepoMetricsRepository>('RepoMetricsRepository'),
+  IntrospectionCheckpointRepository: new Token<IIntrospectionCheckpointRepository>('IntrospectionCheckpointRepository'),
   GithubSettingsService: new Token<IGithubSettingsService>('GithubSettingsService'),
   RepoCollector: new Token<RepoCollector>('RepoCollector'),
   ProcessCollector: new Token<ProcessCollector>('ProcessCollector'),
