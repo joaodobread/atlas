@@ -44,6 +44,7 @@ app: engine ## Tudo em containers com build local da imagem (http://localhost:30
 
 app-image: engine ## Tudo em containers com a imagem publicada (APP_IMAGE=...)
 	@test -n "$$APP_SECRET" || echo "Aviso: APP_SECRET vazio — obrigatório em produção (32+ caracteres)."
+	APP_IMAGE=$(APP_IMAGE) $(COMPOSE) --profile app pull app
 	APP_IMAGE=$(APP_IMAGE) $(COMPOSE) --profile deps --profile app up -d --no-build $(WAIT)
 
 down: engine ## Para todos os containers do projeto (mantém os dados)

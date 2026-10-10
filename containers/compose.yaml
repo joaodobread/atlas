@@ -72,7 +72,8 @@ services:
     build:
       context: ..
       dockerfile: containers/Containerfile
-    # Para usar a imagem publicada: APP_IMAGE=ghcr.io/joaodobread/atlas:<versão> e `up --no-build`.
+    # Para usar a imagem publicada: APP_IMAGE=ghcr.io/joaodobread/atlas:<versão>, `pull app` e depois `up --no-build`
+    # (com `build:` definido, o `up` não baixa a imagem sozinho).
     image: ${APP_IMAGE:-comm-graph:local}
     environment: *app-env
     ports:
