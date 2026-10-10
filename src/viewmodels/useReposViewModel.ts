@@ -238,6 +238,19 @@ export function useReposViewModel() {
     busy: busy || command.busy,
     canRun: perms.canEditGraph,
     canConfigure: perms.canManageSettings,
+    /** Cabeçalho "selecionar todos": vale para a lista filtrada. */
+    allChecked: filtered.length > 0 && filtered.every((r) => checked.has(r.name)),
+    someChecked: filtered.some((r) => checked.has(r.name)) && !filtered.every((r) => checked.has(r.name)),
+    toggleAll: () =>
+      setChecked((s) => {
+        const next = new Set(s);
+        const all = filtered.every((r) => next.has(r.name));
+        for (const r of filtered) {
+          if (all) next.delete(r.name);
+          else next.add(r.name);
+        }
+        return next;
+      }),
     toggleChecked: (name: string) =>
       setChecked((s) => {
         const next = new Set(s);

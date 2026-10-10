@@ -6,6 +6,7 @@ const STAGES: Record<AnalysisDepth, IntrospectionStage[]> = {
   fast: ['collecting', 'analyzing', 'scoring'],
   medium: ['collecting', 'analyzing', 'scoring'],
   full: ['collecting', 'analyzing', 'scanning', 'mapping', 'scoring'],
+  max: ['collecting', 'analyzing', 'scanning', 'mapping', 'scoring'],
 };
 
 const LABEL: Record<IntrospectionStage, string> = {

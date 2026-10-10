@@ -5,7 +5,8 @@ export const PROTOCOLS = ['http', 'grpc', 'graphql', 'sql', 'nosql', 'amqp', 'ka
 export type Protocol = (typeof PROTOCOLS)[number];
 
 /** Profundidade da análise/geração: rápida (heurística), média (LLM) ou completa (LLM + trechos do código). */
-export const ANALYSIS_DEPTHS = ['fast', 'medium', 'full'] as const;
+/** Profundidade da análise: rápida (heurística), média (LLM), completa (LLM + chamadas do código) e máxima (todo o código, blocos inteiros, o que cada módulo expõe e usa). */
+export const ANALYSIS_DEPTHS = ['fast', 'medium', 'full', 'max'] as const;
 export type AnalysisDepth = (typeof ANALYSIS_DEPTHS)[number];
 
 export const ROLES = ['admin', 'editor', 'viewer'] as const;

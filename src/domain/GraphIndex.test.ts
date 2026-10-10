@@ -69,8 +69,8 @@ const build = () =>
     ],
     connections: [conn(10, 2, 7), conn(11, 4, 7, 10), conn(12, 3, 2), conn(13, 5, 8), conn(14, 7, 6), conn(15, 4, 5), conn(16, 8, 7)],
     callSites: [
-      { id: 1, connection_id: 11, file_path: 'a.ts', line: 1, symbol: null, snippet: null, notes: null },
-      { id: 2, connection_id: 11, file_path: 'b.ts', line: null, symbol: null, snippet: null, notes: null },
+      { id: 1, connection_id: 11, file_path: 'a.ts', line: 1, symbol: null, snippet: null, notes: null, end_line: null, code: null },
+      { id: 2, connection_id: 11, file_path: 'b.ts', line: null, symbol: null, snippet: null, notes: null, end_line: null, code: null },
     ],
   });
 

@@ -251,4 +251,15 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'atividade dos repositórios (PRs abertos)',
     sql: `ALTER TABLE repo_introspections ADD COLUMN activity_json text;`,
   },
+  {
+    version: 4,
+    name: 'análise máxima e bloco de código dos locais de chamada',
+    sql: `
+      ALTER TABLE repo_introspections DROP CONSTRAINT IF EXISTS repo_introspections_analysis_depth_check;
+      ALTER TABLE repo_introspections ADD CONSTRAINT repo_introspections_analysis_depth_check
+        CHECK (analysis_depth IN ('fast', 'medium', 'full', 'max'));
+      -- Bloco inteiro (função/método) onde a chamada acontece e a linha em que ele termina.
+      ALTER TABLE call_sites ADD COLUMN end_line integer, ADD COLUMN code text;
+    `,
+  },
 ];

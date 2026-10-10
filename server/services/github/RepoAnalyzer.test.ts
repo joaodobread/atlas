@@ -266,9 +266,12 @@ describe('CodeMapper', () => {
     line: id * 10,
     symbol: 'pay',
     snippet: 'await fetch(url)',
+    code: null,
+    endLine: null,
+    resource: null,
     ...over,
   });
-  const scan = (sites: CodeCallSite[]): CodeScanResult => ({ filesScanned: 1, filesSkipped: 0, sites, folders: ['src/payments', 'src/orders'] });
+  const scan = (sites: CodeCallSite[]): CodeScanResult => ({ filesScanned: 1, filesSkipped: 0, sites, surfaces: [], folders: ['src/payments', 'src/orders'] });
   const baseProposal = (): RepoGraphProposal => ({
     nodes: [
       { key: 'group', existingId: null, name: 'GitHub — acme', kind: 'project', tech: 'github', description: null, parentKey: null },
@@ -291,6 +294,7 @@ describe('CodeMapper', () => {
     const billing = node('Billing', { parent_id: plataforma.id });
     const sites = Array.from({ length: 65 }, (_, i) => site(i + 1));
     const batch1: CodeMappingOutput = {
+      surfaces: [],
       modules: [
         { name: 'Pagamentos', path: 'src/payments', description: 'Cobranças' },
         { name: 'Pedidos', path: 'src/orders', description: '' },
@@ -308,6 +312,7 @@ describe('CodeMapper', () => {
       ],
     };
     const batch2: CodeMappingOutput = {
+      surfaces: [],
       modules: [
         { name: 'PAGAMENTOS', path: 'x', description: 'repetido' },
         { name: 'Sem descrição', path: '', description: '' },
@@ -440,8 +445,17 @@ describe('CodeMapper — destino pelo tipo da chamada', () => {
       line: 3,
       symbol: 'findOne',
       snippet: 'this.animalsRepository.findOne()',
+      code: null,
+      endLine: null,
+      resource: null,
     };
-    const res = await new CodeMapper(new FakeLlm(false)).enrich(input(), proposal, { filesScanned: 1, filesSkipped: 0, sites: [site], folders: [] });
+    const res = await new CodeMapper(new FakeLlm(false)).enrich(input(), proposal, {
+      filesScanned: 1,
+      filesSkipped: 0,
+      sites: [site],
+      surfaces: [],
+      folders: [],
+    });
     expect(res.proposal.nodes.find((n) => n.key === 'mod:animals')).toMatchObject({ name: 'animals', parentKey: 'self' });
     expect(res.proposal.connections).toEqual([
       {
@@ -462,8 +476,148 @@ describe('CodeMapper — destino pelo tipo da chamada', () => {
       ],
       connections: [],
     };
-    const site: CodeCallSite = { id: 1, kind: 'http', file: 'src/orders/a.ts', line: 1, symbol: null, snippet: 'fetch("/orders")' };
-    const res = await new CodeMapper(new FakeLlm(false)).enrich(input(), proposal, { filesScanned: 1, filesSkipped: 0, sites: [site], folders: [] });
+    const site: CodeCallSite = {
+      id: 1,
+      kind: 'http',
+      file: 'src/orders/a.ts',
+      line: 1,
+      symbol: null,
+      snippet: 'fetch("/orders")',
+      code: null,
+      endLine: null,
+      resource: null,
+    };
+    const res = await new CodeMapper(new FakeLlm(false)).enrich(input(), proposal, {
+      filesScanned: 1,
+      filesSkipped: 0,
+      sites: [site],
+      surfaces: [],
+      folders: [],
+    });
     expect(res.proposal.connections).toEqual([]);
+  });
+});
+
+describe('CodeMapper — análise máxima', () => {
+  const proposal = (): RepoGraphProposal => ({
+    nodes: [
+      { key: 'self', existingId: null, name: 'orders-api', kind: 'service', tech: null, description: null, parentKey: null },
+      { key: 'data:postgresql', existingId: null, name: 'PostgreSQL (orders-api)', kind: 'database', tech: 'postgresql', description: null, parentKey: null },
+    ],
+    connections: [],
+  });
+  const site = (id: number, o: Partial<CodeCallSite> = {}): CodeCallSite => ({
+    id,
+    kind: 'sql',
+    file: 'src/orders/repo.ts',
+    line: id,
+    symbol: 'save',
+    snippet: 'db.query(x)',
+    code: 'async save() {\n  db.query(x)\n}',
+    endLine: id + 2,
+    resource: 'pedidos',
+    ...o,
+  });
+  const surface = {
+    id: 1,
+    kind: 'http' as const,
+    name: 'POST /pedidos',
+    file: 'src/orders/controller.ts',
+    line: 5,
+    endLine: 9,
+    symbol: 'create',
+    code: 'create() {}',
+  };
+  const scanOf = (sites: CodeCallSite[]): CodeScanResult => ({ filesScanned: 2, filesSkipped: 0, sites, surfaces: [surface], folders: ['src/orders'] });
+
+  it('LLM: blocos inteiros em lotes menores, interface e descrição por chamada, módulos das rotas', async () => {
+    const sites = Array.from({ length: 16 }, (_, i) => site(i + 1));
+    const llm = new FakeLlm(true, [
+      {
+        modules: [{ name: 'Pedidos', path: 'src/orders', description: 'Pedidos dos clientes' }],
+        surfaces: [],
+        calls: sites.slice(0, 15).map((x) => ({
+          site: x.id,
+          target: 'PostgreSQL (orders-api)',
+          module: 'Pedidos',
+          protocol: 'sql',
+          interface: 'pedidos',
+          description: 'grava o pedido',
+        })),
+      },
+      {
+        modules: [],
+        surfaces: [],
+        calls: [{ site: 16, target: 'PostgreSQL (orders-api)', module: 'Pedidos', protocol: 'sql', interface: null, description: null }],
+      },
+      { modules: [], calls: [], surfaces: [{ surface: 1, module: 'Pedidos', description: 'cria um pedido' }] },
+    ]);
+    const progress: Array<[number, number]> = [];
+    const res = await new CodeMapper(llm).enrich(input(), proposal(), scanOf(sites), (d, t) => progress.push([d, t]), true);
+    expect(res.llmError).toBeNull();
+    expect(llm.requests).toHaveLength(3);
+    expect(llm.requests[0]!.messages[0]!.content).toContain('### site 1 (sql) src/orders/repo.ts:1-3 em save — recurso: pedidos\nasync save()');
+    expect(llm.requests[2]!.messages[0]!.content).toContain('### surface 1 (http) POST /pedidos — src/orders/controller.ts:5-9');
+    expect(progress).toEqual([
+      [0, 3],
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ]);
+    const conns = res.proposal.connections;
+    // Interface do LLM; sem ela, o recurso lido do código.
+    expect(conns.map((c) => [c.fromKey, c.toKey, c.interface, c.description, c.callSites?.length])).toEqual([
+      ['mod:pedidos', 'data:postgresql', 'pedidos', 'grava o pedido', 16],
+    ]);
+    expect(conns[0]!.callSites![0]).toEqual({
+      file_path: 'src/orders/repo.ts',
+      line: 1,
+      symbol: 'save',
+      snippet: 'db.query(x)',
+      end_line: 3,
+      code: 'async save() {\n  db.query(x)\n}',
+    });
+    expect(res.proposal.nodes.find((n) => n.key === 'mod:pedidos')?.interfaces).toEqual([
+      { name: 'POST /pedidos', type: 'http', description: 'cria um pedido', spec: 'src/orders/controller.ts:5-9 (create)' },
+    ]);
+  });
+
+  it('sem LLM: interface pelo recurso lido do código e módulo das rotas pela pasta (sem repetir)', async () => {
+    const scan: CodeScanResult = {
+      ...scanOf([site(1), site(2, { resource: 'itens' }), site(3, { resource: null })]),
+      surfaces: [
+        surface,
+        { ...surface, id: 2 },
+        { ...surface, id: 3, kind: 'job', name: '0 3 * * *', endLine: null, symbol: null },
+        { ...surface, id: 4, file: 'main.ts' },
+      ],
+    };
+    const res = await new CodeMapper(new FakeLlm(false)).enrich(input(), proposal(), scan, undefined, true);
+    expect(res.proposal.connections.map((c) => c.interface ?? null)).toEqual(['pedidos', 'itens', null]);
+    expect(res.proposal.nodes.find((n) => n.key === 'mod:orders')?.interfaces).toEqual([
+      { name: 'POST /pedidos', type: 'http', description: null, spec: 'src/orders/controller.ts:5-9 (create)' },
+      { name: '0 3 * * *', type: 'job', description: null, spec: 'src/orders/controller.ts:5' },
+    ]);
+    // Rota fora de pasta cai no próprio repositório, que já existe na proposta mas não é módulo novo: ganha a interface também.
+    expect(res.proposal.nodes.find((n) => n.key === 'self')?.interfaces).toEqual([expect.objectContaining({ name: 'POST /pedidos' })]);
+  });
+
+  it('só rotas (sem chamadas) também passa pelo mapeamento; superfície desconhecida e nó existente são ignorados', async () => {
+    const existing = proposal();
+    existing.nodes[0] = { ...existing.nodes[0]!, existingId: 9 };
+    const scan: CodeScanResult = { filesScanned: 1, filesSkipped: 0, sites: [], surfaces: [{ ...surface, file: 'main.ts' }], folders: [] };
+    const llm = new FakeLlm(true, [
+      {
+        modules: [],
+        calls: [],
+        surfaces: [
+          { surface: 1, module: null, description: null },
+          { surface: 99, module: 'X', description: null },
+        ],
+      },
+    ]);
+    const res = await new CodeMapper(llm).enrich(input(), existing, scan, undefined, true);
+    expect(res.proposal.nodes[0]!.interfaces).toBeUndefined();
+    expect(res.proposal.nodes.some((n) => n.key === 'mod:x')).toBe(false);
   });
 });

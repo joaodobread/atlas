@@ -164,7 +164,20 @@ export function ReposScreen() {
           <table className="repos-table">
             <thead>
               <tr>
-                {vm.canRun && <th />}
+                {vm.canRun && (
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todos os repositórios da lista"
+                      title="Selecionar todos (da lista filtrada)"
+                      checked={vm.allChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = vm.someChecked;
+                      }}
+                      onChange={vm.toggleAll}
+                    />
+                  </th>
+                )}
                 {COLUMNS.map((c) => (
                   <th key={c.key} onClick={() => vm.sortBy(c.key)} className={vm.sort.key === c.key ? 'sorted' : ''}>
                     {c.label}
@@ -204,9 +217,13 @@ export function ReposScreen() {
                           {r.language ?? ''}
                           {r.status === 'running' ? ' · analisando…' : ''}
                           {r.status === 'pending' && !r.analyzedAt ? ' · não analisado' : ''}
-                          {r.status === 'error' ? ' · erro' : ''}
                           {r.stale ? ' · commits novos' : ''}
                         </span>
+                        {r.error && (
+                          <span className={`row-message small ${r.status === 'error' ? 'bad-text' : 'warn-text'}`} title={r.error}>
+                            {r.status === 'error' ? 'Erro' : 'Aviso'}: {r.error}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>

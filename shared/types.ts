@@ -51,6 +51,10 @@ export interface CallSite {
   symbol: string | null;
   snippet: string | null;
   notes: string | null;
+  /** Linha onde termina o bloco de código (análise máxima). */
+  end_line: number | null;
+  /** Bloco inteiro (função/método) que faz a chamada, sem segredos (análise máxima). */
+  code: string | null;
 }
 
 export interface GraphData {
@@ -490,6 +494,8 @@ export interface ProposalNode {
   description: string | null;
   /** key do pai dentro da proposta (null = raiz). Ignorado para nós existentes. */
   parentKey: string | null;
+  /** O que o nó expõe (rotas HTTP, consumidores de fila, jobs) — análise máxima. */
+  interfaces?: Array<{ name: string; type: string | null; description: string | null; spec: string | null }>;
 }
 
 /** Mudanças propostas no grafo; só são aplicadas quando alguém revisa e confirma. */
@@ -500,8 +506,17 @@ export interface RepoGraphProposal {
     toKey: string;
     protocol: string | null;
     description: string | null;
-    /** Análise completa: onde no código a chamada é feita. */
-    callSites?: Array<{ file_path: string; line: number | null; symbol: string | null; snippet: string | null }>;
+    /** Interface do destino usada (endpoint, tabela, tópico); criada se não existir. */
+    interface?: string | null;
+    /** Análise completa/máxima: onde no código a chamada é feita. */
+    callSites?: Array<{
+      file_path: string;
+      line: number | null;
+      symbol: string | null;
+      snippet: string | null;
+      end_line?: number | null;
+      code?: string | null;
+    }>;
   }>;
 }
 

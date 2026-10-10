@@ -152,6 +152,25 @@ describe('useReposViewModel', () => {
     expect(empty.result.current.progressRows).toEqual([]);
   });
 
+  it('selecionar todos vale para a lista filtrada e alterna', async () => {
+    const { result } = mount();
+    await waitFor(() => expect(result.current.visibleCount).toBe(5));
+    expect(result.current).toMatchObject({ allChecked: false, someChecked: false });
+    act(() => result.current.toggleChecked('api'));
+    expect(result.current).toMatchObject({ allChecked: false, someChecked: true });
+    act(() => result.current.toggleAll());
+    expect(result.current).toMatchObject({ allChecked: true, someChecked: false });
+    expect(result.current.checked.size).toBe(5);
+    // Com filtro, só os visíveis entram/saem.
+    act(() => result.current.setFilter('pedidos'));
+    act(() => result.current.toggleAll());
+    expect([...result.current.checked].sort((a, b) => a.localeCompare(b))).toEqual(['auth', 'bff', 'lib']);
+    act(() => result.current.toggleAll());
+    expect(result.current.checked.size).toBe(5);
+    act(() => result.current.setFilter('nada-casa'));
+    expect(result.current.allChecked).toBe(false);
+  });
+
   it('rótulos de idade e cor pelo tempo parado', () => {
     const now = Date.parse('2026-10-10T00:00:00Z');
     const ago = (d: number) => new Date(now - d * 24 * 3600 * 1000).toISOString();
@@ -347,15 +366,19 @@ describe('useGenerateGraphViewModel', () => {
     expect(one.result.current).toMatchObject({
       depth: 'medium',
       showLlmWarning: true,
-      showCostWarning: false,
+      costWarning: null,
       canSubmit: true,
       busy: false,
       options: DEPTH_OPTIONS,
     });
     act(() => one.result.current.setDepth('full'));
-    expect(one.result.current).toMatchObject({ showCostWarning: true, canSubmit: false });
+    expect(one.result.current).toMatchObject({ costWarning: { title: 'Atenção: a geração completa consome muitos tokens.' }, canSubmit: false });
+    expect(one.result.current.costWarning?.body).toContain('Com 1 repositório(s)');
     act(() => one.result.current.setAcknowledged(true));
     expect(one.result.current.canSubmit).toBe(true);
+    act(() => one.result.current.setDepth('max'));
+    expect(one.result.current.costWarning?.title).toBe('Atenção: a geração máxima é a mais cara e a mais demorada.');
+    expect(one.result.current.costWarning?.body).toContain('todo o código');
     act(() => one.result.current.setDepth('fast'));
     expect(one.result.current.showLlmWarning).toBe(false);
     act(() => one.result.current.setName('  '));

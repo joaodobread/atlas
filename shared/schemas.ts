@@ -90,6 +90,8 @@ const callSiteFields = {
   symbol: optionalText(500),
   snippet: optionalText(10000),
   notes: optionalText(5000),
+  end_line: z.number().int().positive().nullable().optional(),
+  code: optionalText(20000),
 };
 export const createCallSiteSchema = z.object({ ...callSiteFields, line: callSiteFields.line.default(null) }).strict();
 export const updateCallSiteSchema = z.object(callSiteFields).omit({ connection_id: true }).partial().strict();
@@ -125,6 +127,8 @@ export const exchangeCallSiteSchema = z.object({
   symbol: exchangeText(500),
   snippet: exchangeText(10000),
   notes: exchangeText(5000),
+  end_line: z.number().int().positive().optional(),
+  code: exchangeText(20000),
 });
 
 export const exchangeConnectionSchema = z.object({
@@ -406,8 +410,16 @@ export const codeMappingSchema = z.object({
         target: z.string().max(1000).nullable(),
         module: z.string().max(200).nullable(),
         protocol: z.enum(PROTOCOLS),
+        /** Análise máxima: interface usada no destino (endpoint, tabela, tópico) e o que a chamada faz. */
+        interface: z.string().max(300).nullable().optional(),
+        description: z.string().max(500).nullable().optional(),
       }),
     )
     .max(400),
+  /** Análise máxima: módulo e descrição de cada rota/consumidor/job encontrado. */
+  surfaces: z
+    .array(z.object({ surface: z.number().int().positive(), module: z.string().max(200).nullable(), description: z.string().max(500).nullable() }))
+    .max(400)
+    .default([]),
 });
 export type CodeMappingOutput = z.infer<typeof codeMappingSchema>;

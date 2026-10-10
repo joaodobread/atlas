@@ -396,7 +396,15 @@ describe('respostas do LLM', () => {
 
   it('codeMappingSchema valida módulos e chamadas', () => {
     const mapping = { modules: [{ name: 'auth', path: 'src/auth', description: '' }], calls: [{ site: 1, target: null, module: 'auth', protocol: 'http' }] };
-    expect(ok(codeMappingSchema, mapping)).toEqual(mapping);
+    // Sem "surfaces": vale lista vazia (completa); a máxima traz interface/descrição por chamada e as superfícies.
+    expect(ok(codeMappingSchema, mapping)).toEqual({ ...mapping, surfaces: [] });
+    const deep = {
+      ...mapping,
+      calls: [{ ...mapping.calls[0], interface: 'POST /login', description: 'autentica' }],
+      surfaces: [{ surface: 1, module: 'auth', description: null }],
+    };
+    expect(ok(codeMappingSchema, deep)).toEqual(deep);
+    fail(codeMappingSchema, { ...mapping, surfaces: [{ surface: 0, module: null, description: null }] });
     fail(codeMappingSchema, { ...mapping, calls: [{ ...mapping.calls[0], site: 0 }] });
     fail(codeMappingSchema, { ...mapping, calls: [{ ...mapping.calls[0], protocol: 'x' }] });
     fail(codeMappingSchema, { ...mapping, modules: [{ name: '', path: '', description: '' }] });

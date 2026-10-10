@@ -12,6 +12,7 @@ import { PgCallSiteRepository } from '../../repositories/postgres/PgCallSiteRepo
 import { PgConnectionRepository } from '../../repositories/postgres/PgConnectionRepository.ts';
 import { PgGraphRepository } from '../../repositories/postgres/PgGraphRepository.ts';
 import { PgInterfaceRepository } from '../../repositories/postgres/PgInterfaceRepository.ts';
+import { InterfaceService } from '../InterfaceService.ts';
 import { PgNodeRepository } from '../../repositories/postgres/PgNodeRepository.ts';
 import { PgRepoIntrospectionRepository } from '../../repositories/postgres/PgRepoIntrospectionRepository.ts';
 import { PgRepoMetricsRepository } from '../../repositories/postgres/PgRepoMetricsRepository.ts';
@@ -124,6 +125,7 @@ let repos: PgRepoIntrospectionRepository;
 let metrics: PgRepoMetricsRepository;
 let nodes: PgNodeRepository;
 let connections: PgConnectionRepository;
+let interfacesRepo: PgInterfaceRepository;
 let collector: RepoCollector;
 let processCollector: ProcessCollector;
 let service: IntrospectionService;
@@ -134,7 +136,7 @@ function build() {
   metrics = new PgRepoMetricsRepository(db);
   nodes = new PgNodeRepository(db);
   connections = new PgConnectionRepository(db);
-  const interfaces = new PgInterfaceRepository(db);
+  const interfaces = (interfacesRepo = new PgInterfaceRepository(db));
   const callSites = new PgCallSiteRepository(db);
   const graphs = new PgGraphRepository(db);
   collector = new RepoCollector(github);
@@ -156,6 +158,8 @@ function build() {
     new NodeService(nodes, graphs, events),
     new ConnectionService(connections, nodes, interfaces, events),
     new CallSiteService(callSites, connections, events),
+    new InterfaceService(interfaces, nodes, events),
+    interfaces,
     nodes,
     connections,
     new TableDocumentService(db),
@@ -178,7 +182,7 @@ async function waitIdle() {
   );
 }
 
-async function analyzed(name = 'orders-api', input: { force?: boolean; depth?: 'fast' | 'medium' | 'full' } = {}) {
+async function analyzed(name = 'orders-api', input: { force?: boolean; depth?: 'fast' | 'medium' | 'full' | 'max' } = {}) {
   await service.run({ repos: [name], force: input.force ?? false, depth: input.depth ?? 'medium' });
   await waitIdle();
   const r = (await repos.findByName('acme', name))!;
@@ -452,6 +456,44 @@ describe('IntrospectionService — aplicar no grafo', () => {
   beforeEach(async () => {
     await configure();
     await service.sync();
+  });
+
+  it('máxima: blocos de código, interfaces usadas e rotas expostas chegam ao grafo; reaplicar não duplica', async () => {
+    github.files.set(
+      'src/orders/orders.controller.ts',
+      ["@Controller('pedidos')", 'export class OrdersController {', '  @Post()', '  create(@Body() b) {', '    return this.s.create(b);', '  }', '}'].join(
+        '\n',
+      ),
+    );
+    const d = await analyzed('orders-api', { depth: 'max' });
+    expect(d.analysisDepth).toBe('max');
+    expect(d.analysis?.notes.find((n) => n.startsWith('Varredura'))).toContain('1 rota(s)/consumidor(es)/job(s) expostos');
+    const toQueue = d.proposal!.connections.find((c) => c.fromKey === 'mod:orders' && c.toKey === 'res:sqs:orders-queue')!;
+    expect(toQueue).toMatchObject({ interface: 'orders-queue' });
+    expect(toQueue.callSites![0]).toMatchObject({
+      file_path: 'src/orders/publisher.ts',
+      line: 4,
+      end_line: 5,
+      code: expect.stringContaining('SendMessageCommand'),
+    });
+    expect(d.proposal!.nodes.find((n) => n.key === 'mod:orders')?.interfaces).toEqual([
+      { name: 'POST /pedidos', type: 'http', description: null, spec: 'src/orders/orders.controller.ts:3-6 (create)' },
+    ]);
+
+    const result = await service.apply(d.id, 1);
+    expect(result.interfacesCreated).toBe(2);
+    const module = (await nodes.findByGraph(1)).find((n) => n.name === 'orders')!;
+    const queue = (await nodes.findByGraph(1)).find((n) => n.name === 'SQS orders-queue')!;
+    const exposed = await interfacesRepo.findByNodeAndName(module.id, 'POST /pedidos');
+    expect(exposed).toMatchObject({ type: 'http', spec: 'src/orders/orders.controller.ts:3-6 (create)' });
+    const used = await interfacesRepo.findByNodeAndName(queue.id, 'orders-queue');
+    const conn = await connections.findByEndpoints(module.id, queue.id, used!.id);
+    expect(conn).not.toBeNull();
+    const site = (await db.all<{ end_line: number; code: string }>('SELECT end_line, code FROM call_sites WHERE connection_id = ?', [conn!.id]))[0];
+    expect(site).toMatchObject({ end_line: 5, code: expect.stringContaining('SendMessageCommand') });
+
+    const again = await service.apply(d.id, 1);
+    expect(again).toMatchObject({ nodesCreated: 0, interfacesCreated: 0, connectionsCreated: 0 });
   });
 
   it('sem análise: 404', async () => {

@@ -285,6 +285,8 @@ export function buildContainer(config: AppConfig): Container {
         r.resolve(TOKENS.NodeService),
         r.resolve(TOKENS.ConnectionService),
         r.resolve(TOKENS.CallSiteService),
+        r.resolve(TOKENS.InterfaceService),
+        r.resolve(TOKENS.InterfaceRepository),
         r.resolve(TOKENS.NodeRepository),
         r.resolve(TOKENS.ConnectionRepository),
         r.resolve(TOKENS.DocumentService),

@@ -20,6 +20,6 @@ describe('constants', () => {
 
   it('expõe listas de protocolos e profundidades', () => {
     expect(PROTOCOLS).toContain('http');
-    expect(ANALYSIS_DEPTHS).toEqual(['fast', 'medium', 'full']);
+    expect(ANALYSIS_DEPTHS).toEqual(['fast', 'medium', 'full', 'max']);
   });
 });
