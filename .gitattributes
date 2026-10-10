@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+# Binários: sem conversão de fim de linha nem diff textual.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.onnx binary
+*.gz binary
+*.zip binary
+*.tgz binary

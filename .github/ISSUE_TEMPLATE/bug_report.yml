@@ -1,0 +1,62 @@
+name: Relatar bug
+description: Algo não funciona como deveria.
+title: 'fix: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por reportar! Problemas de **segurança** não vão aqui: siga o [SECURITY.md](https://github.com/joaodobread/atlas/blob/main/SECURITY.md).
+        Não cole segredos, tokens nem dados internos de empresas nos campos abaixo.
+  - type: input
+    id: version
+    attributes:
+      label: Versão
+      description: Tag da release, digest da imagem ou commit.
+      placeholder: v1.2.3 / ghcr.io/joaodobread/atlas@sha256:… / a1b2c3d
+    validations:
+      required: true
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: Modo de deploy
+      options:
+        - Imagem do GHCR (compose)
+        - Build local da imagem
+        - Desenvolvimento (npm run dev)
+        - Outro
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Ambiente
+      description: Banco (Postgres local, RDS…), storage (RustFS, S3, R2…), provedor de LLM, navegador.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abra …
+        2. Clique em …
+        3. Veja o erro
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamento obtido
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Saída do container/servidor e do console do navegador (sem segredos).
+      render: text

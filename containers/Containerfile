@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# Imagem de produção do Comm Graph (OCI: funciona com `docker build` e `podman build`).
+#   docker build -f containers/Containerfile -t comm-graph .
+
+ARG NODE_IMAGE=docker.io/library/node:24-slim
+
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+# Front (Vite) em dist/web + back empacotado em dist/server (dependências de runtime ficam em node_modules).
+RUN npm run build && npm run build:server
+
+FROM ${NODE_IMAGE} AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Runtime: Debian slim (o onnxruntime dos embeddings locais precisa de glibc). Sem código-fonte nem devDependencies.
+FROM ${NODE_IMAGE}
+ENV NODE_ENV=production PORT=3001
+WORKDIR /app
+COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=build /app/dist ./dist
+COPY --chown=node:node package.json ./
+RUN mkdir -p /app/data/models && chown -R node:node /app/data
+USER node
+EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "--enable-source-maps", "dist/server/main.js"]

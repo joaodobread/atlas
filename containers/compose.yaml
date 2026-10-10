@@ -1,0 +1,95 @@
+# Comm Graph — containers. Funciona com `docker compose` e `podman compose`.
+#
+# Dev (só as dependências; a app roda no host com `npm run dev`):
+#   docker compose -f containers/compose.yaml --profile deps up -d
+#
+# Produção tudo-em-um (app + Postgres + storage S3 locais):
+#   docker compose -f containers/compose.yaml --profile deps --profile app up -d --build
+#
+# Produção com serviços gerenciados (RDS/Aurora, S3, R2…): só a app; aponte as variáveis
+# DATABASE_URL / DATABASE_SSL e S3_* para os serviços externos (veja containers/README.md):
+#   docker compose -f containers/compose.yaml --profile app up -d --build
+name: comm-graph
+
+x-app-env: &app-env
+  PORT: 3001
+  DATABASE_URL: ${DATABASE_URL:-postgres://commgraph:commgraph@postgres:5432/commgraph}
+  # disable | require | verify-full (RDS: verify-full + DATABASE_SSL_CA com o bundle da AWS)
+  DATABASE_SSL: ${DATABASE_SSL:-disable}
+  DATABASE_SSL_CA: ${DATABASE_SSL_CA:-}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  # Vazio = AWS S3 (credenciais do ambiente/IAM role). Para RustFS/MinIO/R2 informe o endpoint.
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://storage:9000}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-commgraph}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-commgraph-secret}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  S3_BUCKET_PRIVATE: ${S3_BUCKET_PRIVATE:-comm-graph-private}
+  S3_BUCKET_PUBLIC: ${S3_BUCKET_PUBLIC:-comm-graph-public}
+  # URL pública do bucket público (CDN/CloudFront). Vazio = endpoint/bucket.
+  S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-http://localhost:9000/comm-graph-public}
+  # Obrigatório em produção (a app não sobe sem): 32+ caracteres. Criptografa chaves de LLM/GitHub guardadas no banco.
+  APP_SECRET: ${APP_SECRET:-}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  TRUST_PROXY: ${TRUST_PROXY:-loopback}
+
+services:
+  postgres:
+    profiles: [deps]
+    # Postgres 17 com pgvector (busca vetorial dos documentos).
+    image: docker.io/pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-commgraph}
+      POSTGRES_USER: ${POSTGRES_USER:-commgraph}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-commgraph}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  storage:
+    profiles: [deps]
+    # Storage compatível com S3 (RustFS, Apache-2.0). Os buckets (privado e público) são criados pela app.
+    image: docker.io/rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-commgraph}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-commgraph-secret}
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '127.0.0.1:${S3_PORT:-9000}:9000'
+      - '127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - storage-data:/data
+
+  app:
+    profiles: [app]
+    build:
+      context: ..
+      dockerfile: containers/Containerfile
+    # Para usar a imagem publicada: APP_IMAGE=ghcr.io/joaodobread/atlas:<versão> e `up --no-build`.
+    image: ${APP_IMAGE:-comm-graph:local}
+    environment: *app-env
+    ports:
+      - '${APP_PORT:-3001}:3001'
+    # A app espera o banco ficar disponível (tenta reconectar no boot), então funciona com banco externo.
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Cache do modelo de embeddings (também sincronizado com o bucket privado).
+      - app-models:/app/data/models
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  storage-data:
+  app-models:

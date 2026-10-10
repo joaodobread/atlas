@@ -1,0 +1,60 @@
+name: Comm Graph metrics
+description: Envia cobertura, resultados de testes (JUnit) e achados de segurança (SARIF) para uma instância self-hosted do Comm Graph.
+inputs:
+  url:
+    description: 'URL da instância (ex.: https://comm-graph.minhaempresa.com)'
+    required: true
+  token:
+    description: Token de API de um usuário com permissão metrics:write (papel editor). Guarde como secret.
+    required: true
+  coverage:
+    description: Arquivo(s) de cobertura (glob). Formato detectado pelo nome — coverage-summary.json, lcov.info, *.out (Go), cobertura/coverage.xml.
+    required: false
+  junit:
+    description: Relatório(s) JUnit XML dos testes unitários (glob).
+    required: false
+  junit-integration:
+    description: Relatório(s) JUnit XML dos testes de integração (glob).
+    required: false
+  junit-e2e:
+    description: Relatório(s) JUnit XML dos testes ponta a ponta (glob).
+    required: false
+  sarif-sast:
+    description: SARIF de SAST (Semgrep, CodeQL, Rainforest…) (glob).
+    required: false
+  sarif-dast:
+    description: SARIF de DAST (ZAP, Rainforest…) (glob).
+    required: false
+  sarif-sca:
+    description: SARIF de SCA (Trivy, Grype, OSV-Scanner…) (glob).
+    required: false
+  sarif-secrets:
+    description: SARIF de varredura de segredos (gitleaks, trufflehog…) (glob).
+    required: false
+  metrics:
+    description: 'JSON com métricas já calculadas, ex.: {"mutationScore": 72, "flakyRate": 1.5, "lintErrors": 0}'
+    required: false
+    default: '{}'
+  fail-on-error:
+    description: Falha o job se o envio der erro.
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Enviar métricas
+      shell: bash
+      env:
+        CG_URL: ${{ inputs.url }}
+        CG_TOKEN: ${{ inputs.token }}
+        CG_COVERAGE: ${{ inputs.coverage }}
+        CG_JUNIT: ${{ inputs.junit }}
+        CG_JUNIT_INTEGRATION: ${{ inputs.junit-integration }}
+        CG_JUNIT_E2E: ${{ inputs.junit-e2e }}
+        CG_SARIF_SAST: ${{ inputs.sarif-sast }}
+        CG_SARIF_DAST: ${{ inputs.sarif-dast }}
+        CG_SARIF_SCA: ${{ inputs.sarif-sca }}
+        CG_SARIF_SECRETS: ${{ inputs.sarif-secrets }}
+        CG_METRICS: ${{ inputs.metrics }}
+        CG_FAIL: ${{ inputs.fail-on-error }}
+      run: bash "${{ github.action_path }}/send-metrics.sh"
