@@ -40,5 +40,5 @@ export const KIND_LABEL: Record<NodeKind, string> = {
 };
 
 /** Etapas da análise de um repositório, na ordem. */
-export const INTROSPECTION_STAGES = ['collecting', 'analyzing', 'scanning', 'mapping', 'scoring'] as const;
+export const INTROSPECTION_STAGES = ['collecting', 'history', 'analyzing', 'scanning', 'mapping', 'scoring'] as const;
 export type IntrospectionStage = (typeof INTROSPECTION_STAGES)[number];

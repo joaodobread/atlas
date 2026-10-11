@@ -58,7 +58,8 @@ const CONFIG_SOURCE = /(^|\/)(config|configs|env|settings|constants|infra|adapte
 export class RepoCollector {
   constructor(private readonly github: IGithubClient) {}
 
-  async collect(ref: RepoRef): Promise<CollectedRepo> {
+  /** `onProgress(lidos, total)` a cada arquivo lido pela API (Contents), para a barra de progresso. */
+  async collect(ref: RepoRef, onProgress?: (done: number, total: number) => void): Promise<CollectedRepo> {
     const tree = (await this.github.tree(ref.owner, ref.name, ref.sha, ref.token)).filter(
       (e) => !/(^|\/)(node_modules|vendor|dist|build|\.git)\//.test(e.path),
     );
@@ -101,13 +102,24 @@ export class RepoCollector {
       .map((b) => b.path);
 
     const contents = new Map<string, string>();
+    const toRead = [...(readmePath ? [readmePath] : []), ...keyFiles, ...workflows.slice(0, MAX_WORKFLOWS), ...configSources];
+    const hasLock = paths.has('package-lock.json');
+    const total = toRead.length + (hasLock ? 1 : 0);
+    let done = 0;
+    const tick = () => {
+      done++;
+      onProgress?.(done, total);
+    };
+    onProgress?.(0, total);
     await Promise.all(
-      [...(readmePath ? [readmePath] : []), ...keyFiles, ...workflows.slice(0, MAX_WORKFLOWS), ...configSources].map(async (p) => {
+      toRead.map(async (p) => {
         const text = await read(p);
         if (text != null) contents.set(p, p.startsWith('.env') ? envNamesOnly(text) : text);
+        tick();
       }),
     );
-    const lock = paths.has('package-lock.json') ? await read('package-lock.json') : null;
+    const lock = hasLock ? await read('package-lock.json') : null;
+    if (hasLock) tick();
     const [details, rules] = await Promise.all([
       this.github.repoDetails(ref.owner, ref.name, ref.token).catch(() => null),
       this.github.branchRules(ref.owner, ref.name, ref.branch, ref.token).catch(() => null),
