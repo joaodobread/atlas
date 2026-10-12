@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { VisibleEdge } from '../../domain/GraphIndex.ts';
 import { snapToGrid, type GridSpec } from '../../domain/gridSnap.ts';
 import type { GroupResult } from '../../domain/GroupLayout.ts';
 import { buildPath, findJumps, jumpOverlays, labelPoint, routeAll, routeOrthogonal, type Point } from '../../domain/orthogonalRouting.ts';
+import { useCanvasMenuViewModel } from '../../viewmodels/useCanvasMenuViewModel.ts';
 import { useGraphSceneViewModel, type GraphSceneViewModel, type SceneNode } from '../../viewmodels/useGraphSceneViewModel.ts';
+import { CanvasMenu } from './CanvasMenu.tsx';
 import { NodeIcon } from '../icons/NodeIcon.tsx';
 
 interface View {
@@ -54,6 +56,7 @@ interface EdgeGeometry {
 
 export function GraphScene2D() {
   const vm = useGraphSceneViewModel(2);
+  const menu = useCanvasMenuViewModel();
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewState, setView] = useState<View>({ x: 0, y: 0, k: 14 });
   /** Exportando: a cena é desenhada num zoom fixo de leitura (setas, linhas e textos têm tamanho em px). */
@@ -260,11 +263,14 @@ export function GraphScene2D() {
 
   // ---------- Interação ----------
   const onBackgroundDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    // Só o botão principal arrasta/seleciona; o direito abre o menu (onContextMenu).
+    if (e.button !== 0) return;
     svgRef.current?.setPointerCapture(e.pointerId);
     gesture.current = { type: 'pan', startX: e.clientX, startY: e.clientY, view, moved: false };
   };
 
   const onNodeDown = (id: number) => (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     svgRef.current?.setPointerCapture(e.pointerId);
     gesture.current = { type: 'node', id, startX: e.clientX, startY: e.clientY, moved: false };
@@ -306,9 +312,37 @@ export function GraphScene2D() {
     }
   };
 
+  /**
+   * Clique direito: cria um nó. Sobre um nó (ou título de caixa), como filho dele; numa área de caixa do modo Infra,
+   * dentro da caixa mais funda sob o cursor; no vazio, na raiz.
+   */
+  const onContextMenu = (e: ReactMouseEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    if (!menu.canCreate) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const at = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const hit = (e.target as Element).closest('[data-node-id]');
+    let parentId = hit ? Number(hit.getAttribute('data-node-id')) : null;
+    if (parentId == null && vm.grouped) {
+      const wx = (at.x - view.x) / view.k;
+      const wy = (at.y - view.y) / view.k;
+      const box = vm.grouped.boxes.filter((b) => wx >= b.x && wx <= b.x + b.w && wy >= b.y && wy <= b.y + b.h).sort((a, b) => b.depth - a.depth)[0];
+      parentId = box?.id ?? null;
+    }
+    menu.open(at, parentId);
+  };
+
   return (
     <div className="scene-2d-wrap">
-      <svg ref={svgRef} className="scene-2d" onPointerDown={onBackgroundDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      <svg
+        ref={svgRef}
+        className="scene-2d"
+        onPointerDown={onBackgroundDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onContextMenu={onContextMenu}
+      >
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="#3a4766" />
@@ -415,6 +449,7 @@ export function GraphScene2D() {
               return (
                 <g
                   key={b.id}
+                  data-node-id={n.id}
                   className="group-title"
                   transform={`translate(${x + 0.9 * view.k},${y + 0.6 * view.k})`}
                   onPointerDown={onNodeDown(n.id)}
@@ -451,6 +486,7 @@ export function GraphScene2D() {
           return (
             <g
               key={n.id}
+              data-node-id={n.id}
               className={`node-2d${dimmed ? ' dim' : ''}${n.isContext ? ' context' : ''}`}
               transform={`translate(${p.x},${p.y}) scale(${nodeScale})`}
               onPointerDown={onNodeDown(n.id)}
@@ -489,6 +525,7 @@ export function GraphScene2D() {
           );
         })}
       </svg>
+      <CanvasMenu vm={menu} />
     </div>
   );
 }
