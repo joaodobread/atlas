@@ -1051,7 +1051,8 @@ button.tool.active {
   text-anchor: middle;
 }
 .node-2d.context .body {
-  stroke-dasharray: 4 3;
+  /* Relativo ao pathLength=60 do círculo: 12 traços iguais em qualquer raio. */
+  stroke-dasharray: 3 2;
 }
 .node-2d.context .label {
   font-style: italic;

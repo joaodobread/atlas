@@ -15,6 +15,9 @@ export const orientationOf = (a: Point, b: Point): Orientation =>
   Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) * (1 - 1e-6) ? 'h' : 'v';
 
 export interface RouteOptions {
+  /** Espaço ocupado abaixo de cada nó (rótulos): quem sai/chega por baixo começa/termina depois dele, sem riscar o texto. */
+  belowA?: number;
+  belowB?: number;
   /** Deslocamento do ponto de saída/chegada ao longo do lado do nó (portas). */
   startPort?: number;
   endPort?: number;
@@ -39,12 +42,15 @@ export function routeOrthogonal(a: Point, b: Point, ra: number, rb: number, opts
     ];
   } else {
     const s = Math.sign(b.y - a.y) || 1;
-    const midY = channel((a.y + b.y) / 2, 'y');
+    // Descendo, `a` sai pela base (abaixo do rótulo); subindo, `b` é que recebe pela base.
+    const startY = a.y + s * (edgeOf(ra, sp) + (s > 0 ? (opts.belowA ?? 0) : 0));
+    const endY = b.y - s * (edgeOf(rb, ep) + (s < 0 ? (opts.belowB ?? 0) : 0));
+    const midY = channel((startY + endY) / 2, 'y');
     pts = [
-      { x: a.x + sp, y: a.y + s * edgeOf(ra, sp) },
+      { x: a.x + sp, y: startY },
       { x: a.x + sp, y: midY },
       { x: b.x + ep, y: midY },
-      { x: b.x + ep, y: b.y - s * edgeOf(rb, ep) },
+      { x: b.x + ep, y: endY },
     ];
   }
   return simplify(pts);
@@ -57,6 +63,9 @@ export interface RouteRequest {
   b: Point;
   ra: number;
   rb: number;
+  /** Altura do rótulo abaixo de cada ponta (0 = sem rótulo embaixo). */
+  la?: number;
+  lb?: number;
 }
 
 /**
@@ -97,7 +106,9 @@ export function routeAll(
     list.forEach((p, idx) => (ports[p.req]![p.end] = (idx - (list.length - 1) / 2) * gap));
   }
 
-  const routes = requests.map((q, i) => routeOrthogonal(q.a, q.b, q.ra, q.rb, { startPort: ports[i]!.start, endPort: ports[i]!.end, channel: opts.channel }));
+  const routes = requests.map((q, i) =>
+    routeOrthogonal(q.a, q.b, q.ra, q.rb, { startPort: ports[i]!.start, endPort: ports[i]!.end, channel: opts.channel, belowA: q.la, belowB: q.lb }),
+  );
   // Trechos do mesmo nó ficam na mesma faixa (tronco); os de nós diferentes, em faixas paralelas.
   separateLanes(routes, opts.laneGap, opts.bundle ? (ri, i, len) => (i < len / 2 ? `s${requests[ri]!.source}` : `t${requests[ri]!.target}`) : undefined);
   return routes;
