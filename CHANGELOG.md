@@ -6,6 +6,7 @@
 ### Features
 
 * **2d:** criar nó com clique direito na cena; seletor de ícones sem rolagem horizontal ([#33](https://github.com/joaodobread/atlas/issues/33)) ([b8d3045](https://github.com/joaodobread/atlas/commit/b8d30451086af1e90ad7e240c91bd7904c97af8c))
+* **segurança:** relatório de segurança e DevSecOps com LLM ([#34](https://github.com/joaodobread/atlas/issues/34)) ([adc9a4d](https://github.com/joaodobread/atlas/commit/adc9a4db1d270d37e3adaa129e83c04fcd157cd6))
 
 
 ### Bug Fixes
