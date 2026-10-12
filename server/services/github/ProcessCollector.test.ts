@@ -67,6 +67,19 @@ describe('ProcessCollector', () => {
     expect(out.errors).toEqual([]);
   });
 
+  it('progresso: conta cada requisição; o total cresce com as amostras', async () => {
+    const g = new FakeGithubClient();
+    g.closedPulls = [pull({ number: 1 }), pull({ number: 2 })];
+    g.openPulls = [pull({ number: 3, createdAt: ago(30), mergedAt: null })];
+    g.commitList = [commit('a', 'alice'), commit('b', 'bob')];
+    const seen: Array<[number, number]> = [];
+    await new ProcessCollector(g).collect('acme', 'api', 'main', 'tok', (d, t) => seen.push([d, t]));
+    // 3 listas + 2 aprovações + 1 revisão + 2 PRs por commit = 8.
+    expect(seen[0]).toEqual([0, 3]);
+    expect(seen.at(-1)).toEqual([8, 8]);
+    expect(seen.every(([d, t]) => d <= t)).toBe(true);
+  });
+
   it('poucos commits: sem bus factor; sem commits: sem amostra de push direto; sem PRs: zero', async () => {
     const g = new FakeGithubClient();
     g.commitList = [commit('x', 'alice')];
