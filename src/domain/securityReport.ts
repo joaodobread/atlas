@@ -54,7 +54,8 @@ export function radarPoints(values: Array<number | null>, radius: number, cx: nu
 
 const round = (n: number) => Math.round(n * 10) / 10;
 const score = (s: number | null) => (s == null ? '—' : `${s}/100`);
-const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+/** Texto seguro numa célula de tabela Markdown: escapa a barra invertida antes do pipe e junta as linhas. */
+const cell = (s: string) => s.replace(/[\\|]/g, '\\$&').replace(/\r?\n/g, ' ');
 
 function narrativeMd(n: SecurityNarrative): string[] {
   const out = ['## Resumo executivo', '', n.summary, ''];

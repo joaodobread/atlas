@@ -69,7 +69,16 @@ const record = (o: Partial<SecurityReportRecord> = {}): SecurityReportRecord => 
   narrative: {
     summary: 'Resumo.',
     highlights: ['Bom CI'],
-    risks: [{ title: 'Dep | vuln', severity: 'high', axis: 'vulnerabilities', evidence: 'lodash\nantigo', recommendation: 'Atualize', repos: ['acme/api'] }],
+    risks: [
+      {
+        title: 'Dep | vuln C:\\temp',
+        severity: 'high',
+        axis: 'vulnerabilities',
+        evidence: 'lodash\r\nantigo',
+        recommendation: 'Atualize',
+        repos: ['acme/api'],
+      },
+    ],
     roadmap: [
       { horizon: 'now', action: 'Atualizar lodash', impact: 'Fecha CVE', effort: 'low', axis: 'vulnerabilities' },
       { horizon: 'later', action: 'DAST', impact: 'Cobre runtime', effort: 'high', axis: 'pipeline' },
@@ -125,7 +134,7 @@ describe('securityMarkdown', () => {
     expect(md).toContain('| Pipeline DevSecOps | — |');
     expect(md).toContain('- [FALHA] Item: detalhe → corrija');
     expect(md).not.toContain('### Pipeline DevSecOps');
-    expect(md).toContain('| Alto | Dep \\| vuln (acme/api) | Vulnerabilidades | lodash antigo | Atualize |');
+    expect(md).toContain('| Alto | Dep \\| vuln C:\\\\temp (acme/api) | Vulnerabilidades | lodash antigo | Atualize |');
     expect(md).toContain('### Agora');
     expect(md).not.toContain('### Próximo trimestre');
     expect(md).toContain('- **Atualizar lodash** — Fecha CVE (esforço baixo, Vulnerabilidades)');
