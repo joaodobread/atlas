@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/joaodobread/atlas/compare/v1.1.0...v1.2.0) (2026-10-12)
+
+
+### Features
+
+* **2d:** criar nó com clique direito na cena; seletor de ícones sem rolagem horizontal ([#33](https://github.com/joaodobread/atlas/issues/33)) ([b8d3045](https://github.com/joaodobread/atlas/commit/b8d30451086af1e90ad7e240c91bd7904c97af8c))
+
+
+### Bug Fixes
+
+* **2d:** linhas não riscam rótulos dos nós, nome nos nós de contexto e tracejado uniforme ([#30](https://github.com/joaodobread/atlas/issues/30)) ([03fd6a2](https://github.com/joaodobread/atlas/commit/03fd6a2e30376fe3be070b1e2d851052cbc520ab))
+
 ## [1.1.0](https://github.com/joaodobread/atlas/compare/v1.0.1...v1.1.0) (2026-10-12)
 
 
