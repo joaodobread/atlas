@@ -41,6 +41,8 @@ export interface IRepoIntrospectionRepository {
   list(owner: string): Promise<RepoIntrospectionSummary[]>;
   /** Detalhe sem métricas nem histórico (quem monta o detalhe completo é o service). */
   findById(id: number): Promise<Omit<RepoIntrospectionDetail, 'metrics' | 'history'> | null>;
+  /** Todos os repositórios do dono com fatos e scorecard (relatórios consolidados). */
+  listDetails(owner: string): Promise<Array<Omit<RepoIntrospectionDetail, 'metrics' | 'history'>>>;
   findByName(owner: string, name: string): Promise<Omit<RepoIntrospectionDetail, 'metrics' | 'history'> | null>;
   /** Cria ou atualiza os metadados (não mexe na análise). */
   upsertMetadata(meta: RepoMetadata): Promise<void>;

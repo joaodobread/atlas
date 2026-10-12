@@ -1,6 +1,6 @@
 // Schemas zod: única fonte de verdade para validar qualquer entrada (API, import, seed).
 import { z } from 'zod';
-import { ANALYSIS_DEPTHS, NODE_KINDS, PROTOCOLS, ROLES } from './constants.ts';
+import { ANALYSIS_DEPTHS, NODE_KINDS, PROTOCOLS, RISK_LEVELS, ROLES, SECURITY_AXES } from './constants.ts';
 
 const id = z.number().int().positive();
 
@@ -296,7 +296,7 @@ export const runIntrospectionSchema = z
 export type RunIntrospectionInput = z.infer<typeof runIntrospectionSchema>;
 
 /** Formatos de relatório que o workflow do GitHub pode enviar (o servidor interpreta cada um). */
-export const METRICS_REPORT_TYPES = ['istanbul-summary', 'lcov', 'go-cover', 'cobertura', 'junit', 'sarif'] as const;
+export const METRICS_REPORT_TYPES = ['istanbul-summary', 'lcov', 'go-cover', 'cobertura', 'junit', 'sarif', 'sonarqube'] as const;
 export const METRICS_CATEGORIES = ['unit', 'integration', 'e2e', 'sast', 'dast', 'sca', 'secrets', 'lint'] as const;
 
 /** Métricas que o workflow já calculou (todas opcionais). */
@@ -341,6 +341,67 @@ export const ingestMetricsSchema = z
   })
   .strict();
 export type IngestMetricsInput = z.infer<typeof ingestMetricsSchema>;
+
+// ---------- Relatório de segurança ----------
+
+const EFFORTS = ['low', 'medium', 'high'] as const;
+
+/** Pedido de relatório (sem owner/repo = portfólio) ou de dicas, com foco opcional. */
+export const generateSecurityReportSchema = z
+  .object({
+    owner: z.string().trim().min(1).max(100).optional(),
+    repo: z.string().trim().min(1).max(200).optional(),
+    kind: z.enum(['report', 'tips']).default('report'),
+    focus: z.string().trim().max(500).optional(),
+  })
+  .strict()
+  .refine((v) => !v.owner === !v.repo, 'Informe owner e repo juntos (ou nenhum, para o portfólio)');
+export type GenerateSecurityReportInput = z.infer<typeof generateSecurityReportSchema>;
+
+/** Resposta do LLM: relatório escrito. */
+export const securityNarrativeSchema = z.object({
+  summary: z.string().min(1).max(4000),
+  highlights: z.array(z.string().max(500)).max(10),
+  risks: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200),
+        severity: z.enum(RISK_LEVELS),
+        axis: z.enum(SECURITY_AXES),
+        evidence: z.string().max(1000),
+        recommendation: z.string().max(1000),
+        repos: z.array(z.string().max(300)).max(50),
+      }),
+    )
+    .max(20),
+  roadmap: z
+    .array(
+      z.object({
+        horizon: z.enum(['now', 'next', 'later']),
+        action: z.string().min(1).max(500),
+        impact: z.string().max(500),
+        effort: z.enum(EFFORTS),
+        axis: z.enum(SECURITY_AXES),
+      }),
+    )
+    .max(20),
+});
+
+/** Resposta do LLM: dicas práticas. */
+export const securityTipsSchema = z.object({
+  tips: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200),
+        axis: z.enum(SECURITY_AXES),
+        why: z.string().max(1000),
+        how: z.string().max(2000),
+        effort: z.enum(EFFORTS),
+      }),
+    )
+    .min(1)
+    .max(15),
+});
 
 // ---------- Grafos (diagramas) ----------
 export const createGraphSchema = z.object({ name: requiredText(120), description: optionalText(2000) }).strict();

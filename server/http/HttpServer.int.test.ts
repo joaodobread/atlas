@@ -29,6 +29,9 @@ import type {
   RepoIntrospectionSummary,
   RepoMetricsSnapshot,
   SearchResult,
+  SecurityPortfolioView,
+  SecurityReportRecord,
+  SecurityRepoView,
   User,
   WatchedFolder,
 } from '../../shared/types.ts';
@@ -760,6 +763,27 @@ describe('GitHub, repositórios e métricas', () => {
     expect(history.status).toBe(200);
     expect(history.body).toHaveLength(1);
     expect((await viewer.get<RepoMetricsSnapshot[]>('/api/metrics/acme/outro')).body).toEqual([]);
+  });
+
+  it('relatório de segurança: postura (leitura) e geração heurística sem LLM (editor)', async () => {
+    const viewer = new ApiClient(app.baseUrl);
+    await viewer.post('/api/auth/login', { email: 'leitor@acme.dev', password: 'outra-senha-1' });
+    const portfolio = await viewer.get<SecurityPortfolioView>('/api/reports/security');
+    expect(portfolio.status).toBe(200);
+    expect(portfolio.body.posture).toMatchObject({ repos: 1, analyzed: 1 });
+    const one = await viewer.get<SecurityRepoView>('/api/reports/security/repos/acme/api-pagamentos');
+    expect(one.body.posture).toMatchObject({ owner: 'acme', name: 'api-pagamentos' });
+    expect(one.body.posture?.axes).toHaveLength(4);
+    expect((await viewer.get('/api/reports/security/repos/acme/nada')).status).toBe(404);
+    expect((await viewer.post('/api/reports/security', { kind: 'report' })).status).toBe(403);
+
+    expect((await admin.post('/api/reports/security', { owner: 'acme' })).status).toBe(400);
+    const created = await admin.post<SecurityReportRecord>('/api/reports/security', { owner: 'acme', repo: 'api-pagamentos', kind: 'tips', focus: 'pipeline' });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ scope: 'acme/api-pagamentos', kind: 'tips', method: 'heuristic', createdBy: 'Admin' });
+    const report = await admin.post<SecurityReportRecord>('/api/reports/security', {});
+    expect(report.body).toMatchObject({ scope: '*', kind: 'report' });
+    expect((await viewer.get<SecurityRepoView>('/api/reports/security/repos/acme/api-pagamentos')).body.reports).toHaveLength(1);
   });
 
   it('remove o token da configuração do GitHub', async () => {

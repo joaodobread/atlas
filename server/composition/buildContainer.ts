@@ -67,6 +67,10 @@ import { ProcessCollector } from '../services/github/ProcessCollector.ts';
 import { ActivityCollector } from '../services/github/ActivityCollector.ts';
 import { MetricsService } from '../services/metrics/MetricsService.ts';
 import { GithubController } from '../http/controllers/GithubController.ts';
+import { ReportController } from '../http/controllers/ReportController.ts';
+import { PgSecurityReportRepository } from '../repositories/postgres/PgSecurityReportRepository.ts';
+import { SecurityPostureBuilder } from '../services/reports/SecurityPosture.ts';
+import { SecurityReportService } from '../services/reports/SecurityReportService.ts';
 import { PgGraphRepository } from '../repositories/postgres/PgGraphRepository.ts';
 import { GraphsService } from '../services/GraphsService.ts';
 
@@ -342,6 +346,23 @@ export function buildContainer(config: AppConfig): Container {
     TOKENS.GithubController,
     (r) => new GithubController(r.resolve(TOKENS.GithubSettingsService), r.resolve(TOKENS.IntrospectionService), r.resolve(TOKENS.MetricsService)),
   );
+
+  // Relatório de segurança/DevSecOps
+  c.singleton(TOKENS.SecurityReportRepository, (r) => new PgSecurityReportRepository(r.resolve(TOKENS.Database)));
+  c.singleton(TOKENS.SecurityPostureBuilder, () => new SecurityPostureBuilder());
+  c.singleton(
+    TOKENS.SecurityReportService,
+    (r) =>
+      new SecurityReportService(
+        r.resolve(TOKENS.RepoIntrospectionRepository),
+        r.resolve(TOKENS.RepoMetricsRepository),
+        r.resolve(TOKENS.SecurityReportRepository),
+        r.resolve(TOKENS.GithubSettingsService),
+        r.resolve(TOKENS.LlmProvider),
+        r.resolve(TOKENS.SecurityPostureBuilder),
+      ),
+  );
+  c.singleton(TOKENS.ReportController, (r) => new ReportController(r.resolve(TOKENS.SecurityReportService)));
   c.singleton(TOKENS.AuthController, (r) => new AuthController(r.resolve(TOKENS.AuthService), r.resolve(TOKENS.ApiTokenService)));
   c.singleton(TOKENS.UserController, (r) => new UserController(r.resolve(TOKENS.UserService)));
   c.singleton(TOKENS.AuthMiddleware, (r) => new AuthMiddleware(r.resolve(TOKENS.AuthService)));

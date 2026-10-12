@@ -368,8 +368,10 @@ describe('useReposViewModel', () => {
     expect(result.current.currentGraphName).toBe('Prod');
     await act(() => result.current.apply());
     act(() => result.current.openDocument());
+    act(() => result.current.openSecurity());
     expect(apply).not.toHaveBeenCalled();
     expect(useUiStore.getState().docViewer).toBeNull();
+    expect(useUiStore.getState().screen).toBe('graph');
 
     vi.spyOn(api, 'repo').mockResolvedValue(detail());
     act(() => result.current.select(1));
@@ -387,6 +389,8 @@ describe('useReposViewModel', () => {
 
     act(() => result.current.openDocument());
     expect(useUiStore.getState().docViewer).toEqual({ documentId: 8 });
+    act(() => result.current.openSecurity());
+    expect(useUiStore.getState()).toMatchObject({ screen: 'security', securityScope: { owner: 'org', name: 'r1' } });
     act(() => result.current.openSettings());
     expect(useUiStore.getState()).toMatchObject({ screen: 'settings', settingsSection: 'github' });
     act(() => result.current.openGenerate());

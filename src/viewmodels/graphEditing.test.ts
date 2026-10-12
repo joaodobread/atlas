@@ -538,6 +538,10 @@ describe('useNavRailViewModel', () => {
     expect(ui().leftTab).toBe('docs');
     act(() => result.current.openRepos());
     expect(result.current.reposActive).toBe(true);
+    expect(result.current.securityActive).toBe(false);
+    act(() => result.current.openSecurity());
+    expect(result.current.securityActive).toBe(true);
+    expect(useUiStore.getState().securityScope).toBeNull();
     act(() => result.current.openSettings());
     expect(result.current.settingsActive).toBe(true);
     act(() => ui().openSettings('llm'));

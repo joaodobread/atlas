@@ -10,6 +10,7 @@ import { GithubApi } from './GithubApi.ts';
 import { GraphApi } from './GraphApi.ts';
 import { InterfaceApi } from './InterfaceApi.ts';
 import { NodeApi } from './NodeApi.ts';
+import { ReportApi } from './ReportApi.ts';
 import { SettingsApi } from './SettingsApi.ts';
 import { UserApi } from './UserApi.ts';
 
@@ -22,7 +23,7 @@ const http = {
 };
 const fake = http as unknown as IHttpService;
 
-const ALL = [AuthApi, CallSiteApi, ConnectionApi, DocumentApi, GithubApi, GraphApi, InterfaceApi, NodeApi, SettingsApi, UserApi];
+const ALL = [AuthApi, CallSiteApi, ConnectionApi, DocumentApi, GithubApi, GraphApi, InterfaceApi, NodeApi, ReportApi, SettingsApi, UserApi];
 
 beforeEach(() => {
   for (const fn of Object.values(http)) fn.mockReset().mockResolvedValue('ok');
@@ -142,6 +143,17 @@ describe('GithubApi', () => {
       ['/repos/introspect', { force: false, depth: 'fast' }],
       ['/repos/4/apply', { graphId: 2 }],
     ]);
+  });
+});
+
+describe('ReportApi', () => {
+  it('mapeia o relatório de segurança', async () => {
+    const api = ReportApi.getInstance(fake);
+    await api.securityPortfolio();
+    await api.securityRepo('my org', 'a/b');
+    await api.generateSecurity({ kind: 'tips', focus: 'ci' });
+    expect(http.get.mock.calls).toEqual([['/reports/security'], ['/reports/security/repos/my%20org/a%2Fb']]);
+    expect(http.post.mock.calls).toEqual([['/reports/security', { kind: 'tips', focus: 'ci' }]]);
   });
 });
 

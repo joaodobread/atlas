@@ -1,5 +1,5 @@
 name: Comm Graph metrics
-description: Envia cobertura, resultados de testes (JUnit) e achados de segurança (SARIF) para uma instância self-hosted do Comm Graph.
+description: Envia cobertura, resultados de testes (JUnit), achados de segurança (SARIF) e o resumo do SonarQube para uma instância self-hosted do Comm Graph.
 inputs:
   url:
     description: 'URL da instância (ex.: https://comm-graph.minhaempresa.com)'
@@ -31,6 +31,18 @@ inputs:
   sarif-secrets:
     description: SARIF de varredura de segredos (gitleaks, trufflehog…) (glob).
     required: false
+  sonarqube:
+    description: JSON do SonarQube/SonarCloud (resposta de api/measures/component e/ou api/qualitygates/project_status) (glob).
+    required: false
+  sonar-host-url:
+    description: 'URL do SonarQube/SonarCloud para buscar as medidas direto da API (ex.: https://sonarcloud.io).'
+    required: false
+  sonar-project-key:
+    description: Chave do projeto no SonarQube (usada com sonar-host-url).
+    required: false
+  sonar-token:
+    description: Token de leitura do SonarQube (guarde como secret).
+    required: false
   metrics:
     description: 'JSON com métricas já calculadas, ex.: {"mutationScore": 72, "flakyRate": 1.5, "lintErrors": 0}'
     required: false
@@ -55,6 +67,10 @@ runs:
         CG_SARIF_DAST: ${{ inputs.sarif-dast }}
         CG_SARIF_SCA: ${{ inputs.sarif-sca }}
         CG_SARIF_SECRETS: ${{ inputs.sarif-secrets }}
+        CG_SONARQUBE: ${{ inputs.sonarqube }}
+        CG_SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+        CG_SONAR_PROJECT_KEY: ${{ inputs.sonar-project-key }}
+        CG_SONAR_TOKEN: ${{ inputs.sonar-token }}
         CG_METRICS: ${{ inputs.metrics }}
         CG_FAIL: ${{ inputs.fail-on-error }}
       run: bash "${{ github.action_path }}/send-metrics.sh"

@@ -3,7 +3,7 @@ import type { RepoMetricsSnapshot, SeverityCounts, TestCounts } from '../../../s
 import type { IObjectStorage } from '../../infra/storage/IObjectStorage.ts';
 import type { IRepoMetricsRepository, MetricsData } from '../../repositories/contracts/IRepoMetricsRepository.ts';
 import type { IIntrospectionService, IMetricsService } from '../contracts/index.ts';
-import { parseCobertura, parseGoCover, parseIstanbulSummary, parseJunit, parseLcov, parseSarif, type CoverageResult } from './reportParsers.ts';
+import { parseCobertura, parseGoCover, parseIstanbulSummary, parseJunit, parseLcov, parseSarif, parseSonarqube, type CoverageResult } from './reportParsers.ts';
 
 const HISTORY_LIMIT = 50;
 
@@ -30,6 +30,7 @@ export class MetricsService implements IMetricsService {
         input.metrics.lintErrors != null || input.metrics.lintWarnings != null
           ? { errors: input.metrics.lintErrors ?? 0, warnings: input.metrics.lintWarnings ?? 0 }
           : null,
+      sonar: null,
       warnings: [],
     };
     const tools = new Set<string>();
@@ -62,6 +63,11 @@ export class MetricsService implements IMetricsService {
             data.security[kind] = addSeverity(data.security[kind], parsed.counts);
             break;
           }
+          case 'sonarqube': {
+            data.sonar = parseSonarqube(r.content);
+            tools.add(r.tool ?? 'sonarqube');
+            break;
+          }
         }
       } catch (err) {
         data.warnings.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
@@ -72,6 +78,8 @@ export class MetricsService implements IMetricsService {
     if (input.metrics.coverageLines != null || input.metrics.coverageBranches != null) {
       coverage = { lines: input.metrics.coverageLines ?? coverage?.lines ?? null, branches: input.metrics.coverageBranches ?? coverage?.branches ?? null };
     }
+    // Sem relatório de cobertura, vale a do Sonar.
+    if (!coverage && data.sonar?.coverage != null) coverage = { lines: data.sonar.coverage, branches: null };
     data.coverage = coverage;
     data.tools = [...tools];
 
@@ -79,7 +87,8 @@ export class MetricsService implements IMetricsService {
     const reportKeys: string[] = [];
     const prefix = `ci-reports/${safe(input.owner)}/${safe(input.repo)}/${safe(input.sha)}/${Date.now()}`;
     for (const [i, r] of input.reports.entries()) {
-      const ext = r.type === 'sarif' || r.type === 'istanbul-summary' ? 'json' : r.type === 'junit' || r.type === 'cobertura' ? 'xml' : 'txt';
+      const ext =
+        r.type === 'sarif' || r.type === 'istanbul-summary' || r.type === 'sonarqube' ? 'json' : r.type === 'junit' || r.type === 'cobertura' ? 'xml' : 'txt';
       const key = `${prefix}/${i + 1}-${r.type}${r.category ? `-${r.category}` : ''}.${ext}`;
       try {
         await this.storage.put('private', key, r.content, ext === 'json' ? 'application/json' : ext === 'xml' ? 'application/xml' : 'text/plain');

@@ -96,7 +96,7 @@ describe('MetricsService', () => {
     const d = await service.ingest(input({ metrics: { coverageLines: 80 } }));
     expect(d.coverage).toEqual({ lines: 80, branches: null });
     const c = await service.ingest(input({}));
-    expect(c).toMatchObject({ coverage: null, lint: null, tests: {}, security: {}, tools: [] });
+    expect(c).toMatchObject({ coverage: null, lint: null, tests: {}, security: {}, tools: [], sonar: null });
   });
 
   it('relatórios inválidos viram avisos sem impedir o restante', async () => {
@@ -115,6 +115,33 @@ describe('MetricsService', () => {
     expect(snap.tests.e2e?.total).toBe(3);
     expect(snap.tools).toEqual(['jest']);
     expect(snap.reportKeys[0]).toMatch(/^ci-reports\/my_org\/api\/ABCDEF1\//);
+  });
+
+  it('SonarQube: guarda o resumo e usa a cobertura dele quando não há outro relatório', async () => {
+    const sonar = JSON.stringify({
+      component: {
+        measures: [
+          { metric: 'coverage', value: '64.2' },
+          { metric: 'vulnerabilities', value: '1' },
+        ],
+      },
+    });
+    const a = await service.ingest(input({ reports: [{ type: 'sonarqube', content: sonar }] }));
+    expect(a.sonar).toMatchObject({ coverage: 64.2, vulnerabilities: 1 });
+    expect(a.coverage).toEqual({ lines: 64.2, branches: null });
+    expect(a.tools).toEqual(['sonarqube']);
+    expect(a.reportKeys[0]).toMatch(/1-sonarqube\.json$/);
+    const b = await service.ingest(
+      input({
+        reports: [
+          { type: 'lcov', content: LCOV },
+          { type: 'sonarqube', tool: 'sonarcloud', content: sonar },
+        ],
+      }),
+    );
+    expect(b.coverage).toEqual({ lines: 80, branches: 50 });
+    expect(b.tools).toEqual(['sonarcloud']);
+    expect(b.sonar?.coverage).toBe(64.2);
   });
 
   it('média de cobertura ignora valores ausentes', async () => {

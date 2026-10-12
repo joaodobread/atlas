@@ -5,6 +5,7 @@ import { ImportModal } from '../views/ImportModal.tsx';
 import { DetailPanel } from '../views/panels/DetailPanel.tsx';
 import { DocumentViewer } from '../views/docs/DocumentViewer.tsx';
 import { ReposScreen } from '../views/repos/ReposScreen.tsx';
+import { SecurityScreen } from '../views/security/SecurityScreen.tsx';
 import { SettingsScreen } from '../views/settings/SettingsScreen.tsx';
 import { PanelResizer } from '../views/common/PanelResizer.tsx';
 import { LeftPanel } from '../views/panels/LeftPanel.tsx';
@@ -21,6 +22,8 @@ export function App() {
         <SettingsScreen />
       ) : vm.screen === 'repos' ? (
         <ReposScreen />
+      ) : vm.screen === 'security' ? (
+        <SecurityScreen />
       ) : (
         <div
           className={`workspace${vm.leftOpen ? '' : ' no-left'}${vm.hasSelection ? '' : ' no-right'}`}

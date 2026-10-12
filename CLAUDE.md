@@ -45,7 +45,9 @@ services/
                  GraphKnowledgeSync (cada nó vira documento source='graph', regenerado em 'graph.changed')
   github/        introspecção de repositórios: RepoCollector (fatos, sem segredos), RepoAnalyzer (LLM ou heurística),
                  QualityScorer (scorecard), IntrospectionService (fila, documento por repo, proposta → grafo só ao aplicar)
-  metrics/       MetricsService + reportParsers: métricas enviadas pelo CI (cobertura, JUnit, SARIF) → histórico + nota
+  metrics/       MetricsService + reportParsers: métricas enviadas pelo CI (cobertura, JUnit, SARIF, SonarQube) → histórico + nota
+  reports/       relatório de segurança/DevSecOps: SecurityPostureBuilder (4 eixos, maturidade 0–4, risco; sem LLM, a partir
+                 do scorecard + métricas) e SecurityReportService (relatório escrito e dicas pelo LLM, heurística sem LLM, histórico)
 http/
   controllers/   validam a entrada com zod e chamam services; retornam HttpResponse (não usam res do Express)
   RouteBinder    liga rota -> (Token do controller, método); resolve o controller do container na requisição
