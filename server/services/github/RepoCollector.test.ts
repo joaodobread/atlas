@@ -580,6 +580,14 @@ describe('RepoCollector — GitHub, README, trechos e código', () => {
     ]);
   });
 
+  it('progresso: conta os arquivos lidos pela API (Contents), inclusive o lockfile', async () => {
+    const g = new FakeGithubClient({ 'README.md': '# x', 'package.json': '{}', 'package-lock.json': '{}', 'src/a.ts': 'x' });
+    const seen: Array<[number, number]> = [];
+    await new RepoCollector(g).collect(REF, (d, t) => seen.push([d, t]));
+    expect(seen[0]).toEqual([0, 3]);
+    expect(seen.at(-1)).toEqual([3, 3]);
+  });
+
   it('sem README', async () => {
     const { result } = await collect({ 'src/a.ts': 'x' });
     expect(result.readme).toBe('');
