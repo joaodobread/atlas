@@ -93,9 +93,11 @@ describe('useSecurityReportViewModel', () => {
     const { result } = renderHook(() => useSecurityReportViewModel());
     await waitFor(() => expect(result.current.error).toBe('fora do ar'));
     act(() => result.current.reload());
-    await waitFor(() => expect(result.current.error).toBeNull());
+    // O erro some logo no início do recarregamento; espera os dados chegarem.
+    await waitFor(() => expect(result.current.rows).toHaveLength(4));
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
     expect(get).toHaveBeenCalledTimes(2);
-    expect(result.current.rows).toHaveLength(4);
   });
 
   it('repositório: mais recentes por tipo, histórico escolhido e navegação', async () => {
