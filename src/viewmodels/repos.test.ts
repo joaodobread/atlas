@@ -146,7 +146,7 @@ describe('useReposViewModel', () => {
       progress: [{ repo: 'api', depth: 'full', stage: 'scanning', done: 30, total: 120, startedAt: started, stageStartedAt: started }],
     });
     await waitFor(() => expect(result.current.progressRows).toHaveLength(1));
-    expect(result.current.progressRows[0]).toMatchObject({ repo: 'api', label: 'Etapa 3 de 5 · Lendo o código', counter: '30/120 arquivos', percent: 25 });
+    expect(result.current.progressRows[0]).toMatchObject({ repo: 'api', label: 'Etapa 4 de 6 · Lendo o código', counter: '30/120 arquivos', percent: 25 });
     const empty = mount();
     await waitFor(() => expect(empty.result.current.visibleCount).toBe(5));
     expect(empty.result.current.progressRows).toEqual([]);
@@ -506,7 +506,7 @@ describe('useGenerateGraphViewModel', () => {
       type: 'analyzing',
       done: 1,
       total: 2,
-      progress: [{ repo: 'a', label: 'Etapa 2 de 3 · Analisando com o LLM', counter: null, percent: null, elapsed: expect.stringMatching(/^1:0\d$/) }],
+      progress: [{ repo: 'a', label: 'Etapa 3 de 4 · Analisando com o LLM', counter: null, percent: null, elapsed: expect.stringMatching(/^1:0\d$/) }],
     });
     await act(() => vi.advanceTimersByTimeAsync(2500));
     expect(onClose).toHaveBeenCalled();
