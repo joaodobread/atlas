@@ -23,6 +23,24 @@ describe('orientationOf', () => {
 });
 
 describe('routeOrthogonal', () => {
+  it('rótulo abaixo do nó: quem chega por baixo para antes do texto; quem sai por baixo começa depois dele', () => {
+    // b acima de a: chega pela base de b, abaixo do rótulo de b (rb + lb); sai pelo topo de a (sem rótulo no caminho).
+    expect(routeOrthogonal({ x: 0, y: 200 }, { x: 0, y: 0 }, 10, 10, { belowA: 30, belowB: 30 })).toEqual([
+      { x: 0, y: 190 },
+      { x: 0, y: 40 },
+    ]);
+    // a acima de b: sai pela base de a depois do rótulo (ra + la); chega pelo topo de b.
+    expect(routeOrthogonal({ x: 0, y: 0 }, { x: 0, y: 200 }, 10, 10, { belowA: 30, belowB: 30 })).toEqual([
+      { x: 0, y: 40 },
+      { x: 0, y: 190 },
+    ]);
+    // Horizontal não muda.
+    expect(routeOrthogonal({ x: 0, y: 0 }, { x: 200, y: 0 }, 10, 10, { belowA: 30, belowB: 30 })).toEqual([
+      { x: 10, y: 0 },
+      { x: 190, y: 0 },
+    ]);
+  });
+
   it('H-V-H saindo pela borda do círculo', () => {
     expect(routeOrthogonal({ x: 0, y: 0 }, { x: 100, y: 40 }, 5, 10)).toEqual([
       { x: 5, y: 0 },
@@ -80,6 +98,16 @@ describe('simplify', () => {
       { x: 10, y: 9 },
     ]);
     expect(simplify([])).toEqual([]);
+  });
+});
+
+describe('routeAll — rótulos', () => {
+  it('repassa a altura dos rótulos de cada ponta', () => {
+    const [r] = routeAll([{ source: 1, target: 2, a: { x: 0, y: 200 }, b: { x: 0, y: 0 }, ra: 10, rb: 10, la: 5, lb: 25 }], { portGap: 7, laneGap: 8 });
+    expect(r).toEqual([
+      { x: 0, y: 190 },
+      { x: 0, y: 35 },
+    ]);
   });
 });
 

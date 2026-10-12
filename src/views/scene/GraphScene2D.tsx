@@ -30,6 +30,8 @@ const JUMP_EDGE_LIMIT = 250;
 const PULSE_EDGE_LIMIT = 150;
 /** Nível de detalhe (Infra/Camadas): escala mínima dos nós para rótulos e ícones; fonte mínima (px) dos títulos das caixas. */
 const LOD = { labels: 0.45, icons: 0.18, titleFontPx: 5 };
+/** Do círculo até o fim do subtítulo (rótulo em r+15, subtítulo em r+28, ~11px de altura) em unidades do nó. */
+const LABEL_BELOW = 32;
 /** Grade do ímã, em unidades do layout (mais alta que larga: rótulos ficam embaixo). */
 const GRID: GridSpec = { cellX: 7, cellY: 6 };
 const CORNER = 10;
@@ -199,6 +201,8 @@ export function GraphScene2D() {
   // Geometria em pixels de tela: recalcula só quando a vista, as posições ou as conexões mudam (não no hover).
   /** Caixas recebem as conexões no ícone do título. */
   const radius = (n: SceneNode) => (containers.has(n.id) ? 9 : pxRadius(n)) * nodeScale;
+  /** Altura dos rótulos (nome + tipo) abaixo do nó, em px de tela: as linhas que chegam por baixo param antes deles. */
+  const labelBelow = (n: SceneNode) => (showLabels && !layeredMode && !containers.has(n.id) ? LABEL_BELOW * nodeScale : 0);
   const { screen, edgeGeometry } = useMemo(() => {
     const screen = new Map<number, Point>();
     for (const [id, p] of world) screen.set(id, { x: p.x * view.k + view.x, y: p.y * view.k + view.y });
@@ -216,7 +220,9 @@ export function GraphScene2D() {
       const b = screen.get(e.target);
       const sn = byId.get(e.source);
       const tn = byId.get(e.target);
-      return a && b && sn && tn ? [{ edge: e, source: e.source, target: e.target, a, b, ra: radius(sn) + 2, rb: radius(tn) + 3 }] : [];
+      return a && b && sn && tn
+        ? [{ edge: e, source: e.source, target: e.target, a, b, ra: radius(sn) + 2, rb: radius(tn) + 3, la: labelBelow(sn), lb: labelBelow(tn) }]
+        : [];
     });
     const routes = routeAll(requests, { portGap: PORT_GAP, laneGap: LANE_GAP, channel, bundle: diagramMode, bundleThreshold: 4 });
     const edgeGeometry: EdgeGeometry[] = requests
@@ -235,7 +241,7 @@ export function GraphScene2D() {
       g.bridges = jumpOverlays(g.route, jumps[i], JUMP);
     });
     return { screen, edgeGeometry };
-  }, [world, view.x, view.y, view.k, vm.edges, vm.magnet, byId, containers, nodeScale, diagramMode]);
+  }, [world, view.x, view.y, view.k, vm.edges, vm.magnet, byId, containers, nodeScale, diagramMode, showLabels, layeredMode]);
 
   // Hover: o nó e seus vizinhos diretos ficam em destaque.
   const hoverNeighbors = hoverId != null && !gesture.current ? new Set<number>([hoverId]) : null;
@@ -458,7 +464,8 @@ export function GraphScene2D() {
               <title>{`${n.path}\n${n.kindLabel}${n.tech ? ` · ${n.tech}` : ''}`}</title>
               {selected && <circle r={r + 6} className="ring" />}
               {n.hiddenCount > 0 && <circle r={r + 3.5} className="collapsed" stroke={n.color} />}
-              <circle r={r} className="body" stroke={n.color} />
+              {/* pathLength fixo: o tracejado (nós de contexto) fecha a volta sem emendar dois traços. */}
+              <circle r={r} className="body" stroke={n.color} pathLength={n.isContext ? 60 : undefined} />
               {showIcons && <NodeIcon id={n.icon} size={iconSize} color={n.color} x={-iconSize / 2} y={-iconSize / 2} />}
               {n.hiddenCount > 0 && (
                 <g transform={`translate(${r * 0.75},${-r * 0.75})`}>
@@ -471,7 +478,7 @@ export function GraphScene2D() {
               {showLabels && (
                 <>
                   <text className={`label${sideLabel ? ' side' : ''}`} x={sideLabel ? r + 8 : 0} y={sideLabel ? -2 : r + 15}>
-                    {truncate(n.isContext ? n.path : n.name, sideLabel ? 34 : groupedMode ? 24 : 40)}
+                    {truncate(n.name, sideLabel ? 34 : groupedMode ? 24 : 40)}
                   </text>
                   <text className={`sublabel${sideLabel ? ' side' : ''}`} x={sideLabel ? r + 8 : 0} y={sideLabel ? 12 : r + 28}>
                     {truncate(n.tech ? `${n.kindLabel} · ${n.tech}` : n.kindLabel, groupedMode ? 30 : 40)}
