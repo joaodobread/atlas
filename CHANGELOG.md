@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/joaodobread/atlas/compare/v1.0.1...v1.1.0) (2026-10-12)
+
+
+### Features
+
+* **repos:** análise máxima, progresso das análises, selecionar todos e erro na tabela ([#19](https://github.com/joaodobread/atlas/issues/19)) ([ca20a57](https://github.com/joaodobread/atlas/commit/ca20a5735950190465dbbb66ed808442c6a0a7c2))
+* **repos:** máxima sem limite de arquivos e retomar análises interrompidas ([#22](https://github.com/joaodobread/atlas/issues/22)) ([1e1b2e5](https://github.com/joaodobread/atlas/commit/1e1b2e5509c0ed30ce1366cb3fadc90756a7963f))
+* **repos:** progresso contável na coleta (arquivos) e nova etapa de PRs, revisões e commits ([#29](https://github.com/joaodobread/atlas/issues/29)) ([3a02c9f](https://github.com/joaodobread/atlas/commit/3a02c9f716f0506c3df15dfcac50430354189fb0))
+
+
+### Bug Fixes
+
+* **repos:** painel do repositório não pisca ao trocar de seleção ([#21](https://github.com/joaodobread/atlas/issues/21)) ([8bfae0d](https://github.com/joaodobread/atlas/commit/8bfae0d6608f8439092aaa8ce135d838af7e1c3d))
+
 ## [1.0.1](https://github.com/joaodobread/atlas/compare/v1.0.0...v1.0.1) (2026-10-10)
 
 
