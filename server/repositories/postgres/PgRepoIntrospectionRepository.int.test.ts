@@ -118,6 +118,18 @@ describe('PgRepoIntrospectionRepository', () => {
     expect((await repo.list('acme')).map((r) => r.name)).toEqual(['novo', 'velho', 'alpha', 'zeta']);
   });
 
+  it('listDetails traz fatos e scorecard dos repositórios do dono, por nome', async () => {
+    await repo.upsertMetadata(meta({ name: 'web' }));
+    await repo.upsertMetadata(meta({ name: 'api' }));
+    await repo.upsertMetadata(meta({ owner: 'outro', name: 'x' }));
+    await repo.saveOutcome(await idOf('acme', 'web'), outcome());
+    const list = await repo.listDetails('acme');
+    expect(list.map((r) => [r.name, r.quality?.score ?? null, r.facts != null])).toEqual([
+      ['api', null, false],
+      ['web', 7, true],
+    ]);
+  });
+
   it('deleteMissing remove só os repositórios do dono que não vieram mais', async () => {
     for (const name of ['a', 'b', 'c']) await repo.upsertMetadata(meta({ name }));
     await repo.upsertMetadata(meta({ owner: 'outro', name: 'a' }));

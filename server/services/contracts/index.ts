@@ -1,4 +1,6 @@
 import type { AuthUser } from '../../core/auth/AuthUser.ts';
+import type { GenerateSecurityReportInput } from '../../../shared/schemas.ts';
+import type { SecurityPortfolioView, SecurityReportRecord, SecurityRepoView } from '../../../shared/types.ts';
 import type { ApiTokenView, AuthStatus, CreatedApiToken, User } from '../../../shared/types.ts';
 import type { ChangePasswordInput, CreateApiTokenInput, CreateUserInput, LoginInput, SetupInput, UpdateUserInput } from '../../../shared/schemas.ts';
 import type {
@@ -211,4 +213,12 @@ export interface IIntrospectionService {
 export interface IMetricsService {
   ingest(input: IngestMetricsInput): Promise<RepoMetricsSnapshot>;
   history(owner: string, repo: string): Promise<RepoMetricsSnapshot[]>;
+}
+
+export interface ISecurityReportService {
+  /** Visão consolidada de todos os repositórios analisados + relatórios gerados para o portfólio. */
+  portfolio(): Promise<SecurityPortfolioView>;
+  repo(owner: string, name: string): Promise<SecurityRepoView>;
+  /** Gera relatório ou dicas (LLM quando configurado; senão, ou se falhar, heurística) e guarda no histórico. */
+  generate(input: GenerateSecurityReportInput, userId: number | null): Promise<SecurityReportRecord>;
 }

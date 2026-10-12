@@ -79,6 +79,7 @@ export function useReposViewModel() {
   const pushToast = useUiStore((s) => s.pushToast);
   const openDocument = useUiStore((s) => s.openDocument);
   const openSettings = useUiStore((s) => s.openSettings);
+  const showSecurity = useUiStore((s) => s.showSecurity);
   const graphId = useUiStore((s) => s.graphId);
   const graphs = useGraphStore((s) => s.graphs);
   const perms = usePermissions();
@@ -309,6 +310,10 @@ export function useReposViewModel() {
       if (detail?.documentId) openDocument({ documentId: detail.documentId });
     },
     openSettings: () => openSettings('github'),
+    /** Relatório de segurança/DevSecOps do repositório aberto. */
+    openSecurity: () => {
+      if (detail) showSecurity({ owner: detail.owner, name: detail.name });
+    },
     currentGraphName,
     /** Repositórios marcados (para a janela "Gerar grafo"). */
     selectedRepos: repos.filter((r) => checked.has(r.name)),

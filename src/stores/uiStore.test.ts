@@ -33,6 +33,10 @@ describe('uiStore', () => {
     expect(ui()).toMatchObject({ screen: 'settings', settingsSection: 'llm' });
     ui().showRepos();
     expect(ui().screen).toBe('repos');
+    ui().showSecurity({ owner: 'acme', name: 'api' });
+    expect(ui()).toMatchObject({ screen: 'security', securityScope: { owner: 'acme', name: 'api' } });
+    ui().showSecurity();
+    expect(ui().securityScope).toBeNull();
     ui().openSettings();
     expect(ui().settingsSection).toBe('llm');
     ui().showGraph();

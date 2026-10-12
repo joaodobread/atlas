@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowDownUp, FileText, GitBranch, ListTree, Settings } from 'lucide-react';
+import { ArrowDownUp, FileText, GitBranch, ListTree, Settings, ShieldCheck } from 'lucide-react';
 import { useNavRailViewModel } from '../viewmodels/useNavRailViewModel.ts';
 
 /** Fecha o menu <details> depois de escolher uma opção. */
@@ -50,6 +50,14 @@ export function NavRail() {
         aria-label="Repositórios do GitHub"
       >
         <GitBranch size={18} />
+      </button>
+      <button
+        className={`rail-item${vm.securityActive ? ' active' : ''}`}
+        onClick={vm.openSecurity}
+        title="Relatório de segurança e DevSecOps"
+        aria-label="Relatório de segurança e DevSecOps"
+      >
+        <ShieldCheck size={18} />
       </button>
 
       <div className="rail-spacer" />

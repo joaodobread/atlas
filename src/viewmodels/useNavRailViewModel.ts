@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/authStore.ts';
 import { useUiStore, type LeftTab } from '../stores/uiStore.ts';
 import { usePermissions } from './usePermissions.ts';
 
-/** Barra de navegação lateral: painéis, repositórios, import/export, configurações e conta. */
+/** Barra de navegação lateral: painéis, repositórios, segurança, import/export, configurações e conta. */
 export function useNavRailViewModel() {
   const leftTab = useUiStore((s) => s.leftTab);
   const leftOpen = useUiStore((s) => s.leftOpen);
@@ -14,6 +14,7 @@ export function useNavRailViewModel() {
   const openSettings = useUiStore((s) => s.openSettings);
   const toggleLeft = useUiStore((s) => s.toggleLeft);
   const showRepos = useUiStore((s) => s.showRepos);
+  const showSecurity = useUiStore((s) => s.showSecurity);
   const setImportOpen = useUiStore((s) => s.setImportOpen);
   const pushToast = useUiStore((s) => s.pushToast);
   const user = useAuthStore((s) => s.user);
@@ -38,6 +39,8 @@ export function useNavRailViewModel() {
     reposActive: screen === 'repos',
     settingsActive: screen === 'settings',
     openRepos: showRepos,
+    securityActive: screen === 'security',
+    openSecurity: () => showSecurity(),
     canImport: perms.canEditGraph,
     openImport: () => setImportOpen(true),
     exportJson,

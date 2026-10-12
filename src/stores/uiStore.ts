@@ -5,7 +5,13 @@ export type Selection = { type: 'node'; id: number } | { type: 'connection'; id:
 
 export type ViewMode = '3d' | '2d';
 export type LeftTab = 'tree' | 'docs';
-export type Screen = 'graph' | 'settings' | 'repos';
+export type Screen = 'graph' | 'settings' | 'repos' | 'security';
+
+/** Repositório aberto no relatório de segurança (null = portfólio). */
+export interface SecurityScope {
+  owner: string;
+  name: string;
+}
 export type ExportFormat = 'png' | 'svg';
 export type SettingsSection = 'account' | 'users' | 'llm' | 'github';
 export type PanelSide = 'left' | 'right';
@@ -46,6 +52,7 @@ interface UiState {
   /** Tela principal: o grafo ou as configurações. */
   screen: Screen;
   settingsSection: SettingsSection;
+  securityScope: SecurityScope | null;
   panelWidths: Record<PanelSide, number>;
   importOpen: boolean;
   toasts: Toast[];
@@ -72,6 +79,8 @@ interface UiState {
   setSearchHighlight(ids: Iterable<number> | null): void;
   openDocument(target: DocViewerTarget | null): void;
   showRepos(): void;
+  /** Relatório de segurança do portfólio ou de um repositório. */
+  showSecurity(scope?: SecurityScope | null): void;
   openSettings(section?: SettingsSection): void;
   showGraph(): void;
   setPanelWidth(side: PanelSide, width: number | null): void;
@@ -102,6 +111,7 @@ export const useUiStore = create<UiState>()(
       docViewer: null,
       screen: 'graph',
       settingsSection: 'account',
+      securityScope: null,
       panelWidths: DEFAULT_PANEL_WIDTHS,
       importOpen: false,
       toasts: [],
@@ -128,6 +138,7 @@ export const useUiStore = create<UiState>()(
       setSearchHighlight: (ids) => set({ searchHighlight: ids ? new Set(ids) : null }),
       openDocument: (docViewer) => set({ docViewer }),
       showRepos: () => set({ screen: 'repos' }),
+      showSecurity: (scope = null) => set({ screen: 'security', securityScope: scope }),
       openSettings: (section) => set((s) => ({ screen: 'settings', settingsSection: section ?? s.settingsSection })),
       showGraph: () => set({ screen: 'graph' }),
       setPanelWidth: (side, width) => set((s) => ({ panelWidths: { ...s.panelWidths, [side]: width ?? DEFAULT_PANEL_WIDTHS[side] } })),

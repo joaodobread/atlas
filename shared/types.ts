@@ -1,5 +1,5 @@
 // Entidades persistidas, compartilhadas entre servidor e UI.
-import type { AnalysisDepth, IntrospectionStage, NodeKind, Permission, Role } from './constants.ts';
+import type { AnalysisDepth, IntrospectionStage, NodeKind, Permission, RISK_LEVELS, Role, SECURITY_AXES } from './constants.ts';
 
 export type { NodeKind, Protocol } from './constants.ts';
 
@@ -457,6 +457,21 @@ export interface TestCounts {
   skipped: number;
 }
 
+export type SonarRating = 'A' | 'B' | 'C' | 'D' | 'E';
+
+/** Resumo do SonarQube/SonarCloud (api/measures/component + quality gate). */
+export interface SonarSummary {
+  qualityGate: 'OK' | 'WARN' | 'ERROR' | null;
+  bugs: number | null;
+  vulnerabilities: number | null;
+  hotspots: number | null;
+  codeSmells: number | null;
+  coverage: number | null;
+  duplication: number | null;
+  ncloc: number | null;
+  ratings: { security: SonarRating | null; reliability: SonarRating | null; maintainability: SonarRating | null; hotspotsReviewed: SonarRating | null };
+}
+
 /** Métricas enviadas por um workflow, já interpretadas. */
 export interface RepoMetricsSnapshot {
   id: number;
@@ -476,6 +491,8 @@ export interface RepoMetricsSnapshot {
   mutationScore: number | null;
   flakyRate: number | null;
   lint: { errors: number; warnings: number } | null;
+  /** SonarQube/SonarCloud (ausente em métricas antigas). */
+  sonar?: SonarSummary | null;
   /** Relatórios que não puderam ser interpretados. */
   warnings: string[];
 }
@@ -603,4 +620,159 @@ export interface IntrospectionRunState {
   failed: number;
   /** Um item por repositório sendo analisado agora. */
   progress: IntrospectionProgress[];
+}
+
+// ---------- Relatório de segurança / DevSecOps ----------
+
+export type SecurityAxis = (typeof SECURITY_AXES)[number];
+export type RiskLevel = (typeof RISK_LEVELS)[number];
+export type MaturityLevel = 0 | 1 | 2 | 3 | 4;
+export type FindingSource = 'sast' | 'dast' | 'sca' | 'secrets';
+
+export interface PostureItem {
+  id: string;
+  label: string;
+  status: QualityCheckStatus;
+  /** 0–10; null = não medido. */
+  score: number | null;
+  detail: string;
+  fix: string | null;
+}
+
+export interface PostureAxis {
+  axis: SecurityAxis;
+  label: string;
+  /** 0–100; null = nada medido. */
+  score: number | null;
+  items: PostureItem[];
+}
+
+export interface DevSecOpsPractice {
+  id: string;
+  label: string;
+  /** null = não deu para verificar. */
+  adopted: boolean | null;
+  /** false = não se aplica ao repositório (ex.: DAST numa biblioteca). */
+  applicable: boolean;
+}
+
+/** Postura de segurança de um repositório, calculada (sem LLM) do scorecard, dos fatos e das métricas do CI. */
+export interface SecurityPosture {
+  owner: string;
+  name: string;
+  htmlUrl: string | null;
+  analyzedAt: string | null;
+  metricsAt: string | null;
+  /** 0–100. */
+  score: number | null;
+  risk: RiskLevel;
+  riskReasons: string[];
+  maturity: { level: MaturityLevel; label: string; next: { level: MaturityLevel; label: string; missing: string[] } | null };
+  axes: PostureAxis[];
+  practices: DevSecOpsPractice[];
+  findings: {
+    bySource: Partial<Record<FindingSource, SeverityCounts>>;
+    total: SeverityCounts;
+    vulnerableDependencies: number | null;
+    sonar: SonarSummary | null;
+    tools: string[];
+  };
+}
+
+export interface PortfolioRepoRow {
+  owner: string;
+  name: string;
+  score: number | null;
+  risk: RiskLevel;
+  level: MaturityLevel;
+  axes: Record<SecurityAxis, number | null>;
+  critical: number;
+  high: number;
+  vulnerableDependencies: number | null;
+  /** Primeiros motivos do risco. */
+  reasons: string[];
+}
+
+/** Visão consolidada de todos os repositórios analisados (para quem gerencia). */
+export interface PortfolioPosture {
+  /** Repositórios na lista / com análise. */
+  repos: number;
+  analyzed: number;
+  score: number | null;
+  axes: Record<SecurityAxis, number | null>;
+  byRisk: Record<RiskLevel, number>;
+  /** Quantidade de repositórios em cada nível (índice = nível). */
+  byLevel: number[];
+  findings: SeverityCounts;
+  vulnerableDependencies: number;
+  /** Adoção de cada prática entre os repositórios em que ela se aplica e foi verificada. */
+  adoption: Array<{ id: string; label: string; adopted: number; measured: number }>;
+  rows: PortfolioRepoRow[];
+}
+
+export interface SecurityRisk {
+  title: string;
+  severity: RiskLevel;
+  axis: SecurityAxis;
+  evidence: string;
+  recommendation: string;
+  /** Repositórios afetados (relatório do portfólio). */
+  repos: string[];
+}
+
+export interface SecurityRoadmapItem {
+  horizon: 'now' | 'next' | 'later';
+  action: string;
+  impact: string;
+  effort: 'low' | 'medium' | 'high';
+  axis: SecurityAxis;
+}
+
+/** Relatório escrito (LLM ou heurística). */
+export interface SecurityNarrative {
+  summary: string;
+  highlights: string[];
+  risks: SecurityRisk[];
+  roadmap: SecurityRoadmapItem[];
+}
+
+export interface SecurityTip {
+  title: string;
+  axis: SecurityAxis;
+  why: string;
+  how: string;
+  effort: 'low' | 'medium' | 'high';
+}
+
+export interface SecurityReportRecord {
+  id: number;
+  /** "owner/repo" ou "*" (portfólio). */
+  scope: string;
+  kind: 'report' | 'tips';
+  focus: string | null;
+  method: 'llm' | 'heuristic';
+  model: string | null;
+  /** O LLM falhou e o conteúdo veio da heurística. */
+  llmError: string | null;
+  /** Postura no momento da geração. */
+  score: number | null;
+  risk: RiskLevel | null;
+  level: MaturityLevel | null;
+  narrative: SecurityNarrative | null;
+  tips: SecurityTip[] | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface SecurityPortfolioView {
+  posture: PortfolioPosture;
+  reports: SecurityReportRecord[];
+  llm: { configured: boolean; model: string | null };
+}
+
+export interface SecurityRepoView {
+  /** null = repositório ainda não analisado. */
+  posture: SecurityPosture | null;
+  reports: SecurityReportRecord[];
+  llm: { configured: boolean; model: string | null };
 }

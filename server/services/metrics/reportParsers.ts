@@ -1,4 +1,4 @@
-import type { SeverityCounts, TestCounts } from '../../../shared/types.ts';
+import type { SeverityCounts, SonarRating, SonarSummary, TestCounts } from '../../../shared/types.ts';
 
 /** Interpretação dos relatórios que os workflows enviam. Funções puras: texto → números. */
 
@@ -118,6 +118,49 @@ export function parseSarif(text: string): SarifResult {
     }
   }
   return { tools: [...tools], counts };
+}
+
+const RATINGS: SonarRating[] = ['A', 'B', 'C', 'D', 'E'];
+
+/**
+ * SonarQube/SonarCloud: resposta de `api/measures/component` e/ou de `api/qualitygates/project_status`
+ * (um objeto com as duas, ou uma lista delas, como o `jq -s` gera). Notas 1.0–5.0 viram A–E.
+ */
+export function parseSonarqube(text: string): SonarSummary {
+  const json = JSON.parse(text) as unknown;
+  const parts = (Array.isArray(json) ? json : [json]) as Array<{
+    component?: { measures?: Array<{ metric?: string; value?: string; period?: { value?: string } }> };
+    measures?: Array<{ metric?: string; value?: string }>;
+    projectStatus?: { status?: string };
+  }>;
+  const values = new Map<string, string>();
+  let gate: string | undefined;
+  for (const p of parts) {
+    for (const m of [...(p?.component?.measures ?? []), ...(p?.measures ?? [])]) if (m.metric && m.value != null) values.set(m.metric, m.value);
+    gate ??= p?.projectStatus?.status;
+  }
+  if (!values.size && !gate) throw new Error('JSON do SonarQube sem "component.measures" nem "projectStatus"');
+  const n = (metric: string) => num(values.has(metric) ? Number(values.get(metric)) : undefined);
+  const rating = (metric: string) => {
+    const v = n(metric);
+    return v == null ? null : (RATINGS[Math.min(4, Math.max(0, Math.round(v) - 1))] ?? null);
+  };
+  return {
+    qualityGate: gate === 'OK' || gate === 'WARN' || gate === 'ERROR' ? gate : null,
+    bugs: n('bugs'),
+    vulnerabilities: n('vulnerabilities'),
+    hotspots: n('security_hotspots'),
+    codeSmells: n('code_smells'),
+    coverage: n('coverage'),
+    duplication: n('duplicated_lines_density'),
+    ncloc: n('ncloc'),
+    ratings: {
+      security: rating('security_rating'),
+      reliability: rating('reliability_rating'),
+      maintainability: rating('sqale_rating'),
+      hotspotsReviewed: rating('security_review_rating'),
+    },
+  };
 }
 
 function num(v: number | undefined): number | null {

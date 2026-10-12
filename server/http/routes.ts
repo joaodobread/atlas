@@ -74,7 +74,12 @@ export function buildApiRouter(container: IContainer): Router {
     .get('/repos/:id', TOKENS.GithubController, 'show', 'graph:read')
     .post('/repos/:id/apply', TOKENS.GithubController, 'apply', 'graph:write')
     .post('/metrics', TOKENS.GithubController, 'ingestMetrics', 'metrics:write')
-    .get('/metrics/:owner/:repo', TOKENS.GithubController, 'metricsHistory', 'graph:read');
+    .get('/metrics/:owner/:repo', TOKENS.GithubController, 'metricsHistory', 'graph:read')
+
+    // Relatório de segurança/DevSecOps (gerar usa o LLM: editores)
+    .get('/reports/security', TOKENS.ReportController, 'securityPortfolio', 'graph:read')
+    .get('/reports/security/repos/:owner/:repo', TOKENS.ReportController, 'securityRepo', 'graph:read')
+    .post('/reports/security', TOKENS.ReportController, 'generateSecurity', 'graph:write');
 
   return router;
 }

@@ -42,3 +42,24 @@ export const KIND_LABEL: Record<NodeKind, string> = {
 /** Etapas da análise de um repositório, na ordem. */
 export const INTROSPECTION_STAGES = ['collecting', 'history', 'analyzing', 'scanning', 'mapping', 'scoring'] as const;
 export type IntrospectionStage = (typeof INTROSPECTION_STAGES)[number];
+
+/** Eixos do relatório de segurança/DevSecOps. */
+export const SECURITY_AXES = ['vulnerabilities', 'pipeline', 'supplyChain', 'governance'] as const;
+export const SECURITY_AXIS_LABEL: Record<(typeof SECURITY_AXES)[number], string> = {
+  vulnerabilities: 'Vulnerabilidades',
+  pipeline: 'Pipeline DevSecOps',
+  supplyChain: 'Cadeia de suprimentos',
+  governance: 'Governança',
+};
+
+/** Do mais grave para o menos grave. */
+export const RISK_LEVELS = ['critical', 'high', 'medium', 'low'] as const;
+export const RISK_LABEL: Record<(typeof RISK_LEVELS)[number], string> = {
+  critical: 'Crítico',
+  high: 'Alto',
+  medium: 'Médio',
+  low: 'Baixo',
+};
+
+/** Níveis de maturidade DevSecOps (índice = nível). */
+export const MATURITY_LABELS = ['Ausente', 'Inicial', 'Básico', 'Gerenciado', 'Avançado'] as const;

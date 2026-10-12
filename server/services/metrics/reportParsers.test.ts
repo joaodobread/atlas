@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCobertura, parseGoCover, parseIstanbulSummary, parseJunit, parseLcov, parseSarif } from './reportParsers.ts';
+import { parseCobertura, parseGoCover, parseIstanbulSummary, parseJunit, parseLcov, parseSarif, parseSonarqube } from './reportParsers.ts';
 
 describe('parseIstanbulSummary', () => {
   it('lê o total de linhas e branches', () => {
@@ -140,5 +140,52 @@ describe('parseSarif', () => {
 
   it('rejeita SARIF sem runs', () => {
     expect(() => parseSarif('{}')).toThrow('SARIF sem "runs"');
+  });
+});
+
+describe('parseSonarqube', () => {
+  const measures = {
+    component: {
+      key: 'app',
+      measures: [
+        { metric: 'bugs', value: '3' },
+        { metric: 'vulnerabilities', value: '2' },
+        { metric: 'security_hotspots', value: '5' },
+        { metric: 'code_smells', value: '120' },
+        { metric: 'coverage', value: '71.4' },
+        { metric: 'duplicated_lines_density', value: '2.1' },
+        { metric: 'ncloc', value: '15000' },
+        { metric: 'security_rating', value: '1.0' },
+        { metric: 'reliability_rating', value: '3.0' },
+        { metric: 'sqale_rating', value: '9.0' },
+        { metric: 'security_review_rating', value: '0' },
+      ],
+    },
+  };
+
+  it('lê medidas e quality gate (lista do jq -s), notas viram A–E', () => {
+    expect(parseSonarqube(JSON.stringify([measures, { projectStatus: { status: 'ERROR' } }]))).toEqual({
+      qualityGate: 'ERROR',
+      bugs: 3,
+      vulnerabilities: 2,
+      hotspots: 5,
+      codeSmells: 120,
+      coverage: 71.4,
+      duplication: 2.1,
+      ncloc: 15000,
+      ratings: { security: 'A', reliability: 'C', maintainability: 'E', hotspotsReviewed: 'A' },
+    });
+  });
+
+  it('aceita só o quality gate ou medidas soltas; status desconhecido vira null', () => {
+    const gate = parseSonarqube(JSON.stringify({ projectStatus: { status: 'NONE' }, measures: [{ metric: 'bugs', value: '0' }] }));
+    expect(gate.qualityGate).toBeNull();
+    expect(gate.bugs).toBe(0);
+    expect(gate.ratings.security).toBeNull();
+    expect(parseSonarqube(JSON.stringify({ projectStatus: { status: 'OK' } })).qualityGate).toBe('OK');
+  });
+
+  it('rejeita JSON sem medidas nem quality gate', () => {
+    expect(() => parseSonarqube('{"component":{}}')).toThrow('SonarQube');
   });
 });

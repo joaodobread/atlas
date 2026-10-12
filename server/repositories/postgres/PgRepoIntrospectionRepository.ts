@@ -120,6 +120,10 @@ export class PgRepoIntrospectionRepository implements IRepoIntrospectionReposito
     return r ? this.detail(r) : null;
   }
 
+  async listDetails(owner: string): Promise<Detail[]> {
+    return (await this.db.all<Row>(`${SELECT} WHERE r.owner = ? ORDER BY r.name`, [owner])).map((r) => this.detail(r));
+  }
+
   async findByName(owner: string, name: string): Promise<Detail | null> {
     const r = await this.db.get<Row>(`${SELECT} WHERE lower(r.owner) = lower(?) AND lower(r.name) = lower(?)`, [owner, name]);
     return r ? this.detail(r) : null;

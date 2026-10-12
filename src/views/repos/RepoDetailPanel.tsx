@@ -39,6 +39,7 @@ export function RepoDetailPanel({ vm, d }: { vm: ReposViewModel; d: RepoIntrospe
           </a>
         )}
         {d.documentId && <button onClick={vm.openDocument}>Abrir documento</button>}
+        {d.facts && <button onClick={vm.openSecurity}>Relatório de segurança</button>}
       </div>
       {d.error && <p className="field-error">{d.status === 'done' ? `Aviso: ${d.error}` : `Erro na última análise: ${d.error}`}</p>}
       {vm.canResume(d) && (

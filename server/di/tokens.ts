@@ -56,6 +56,10 @@ import type { CodeMapper, RepoAnalyzer } from '../services/github/RepoAnalyzer.t
 import type { CodeScanner } from '../services/github/CodeScanner.ts';
 import type { QualityScorer } from '../services/github/QualityScorer.ts';
 import type { GithubController } from '../http/controllers/GithubController.ts';
+import type { ReportController } from '../http/controllers/ReportController.ts';
+import type { ISecurityReportRepository } from '../repositories/contracts/ISecurityReportRepository.ts';
+import type { ISecurityReportService } from '../services/contracts/index.ts';
+import type { SecurityPostureBuilder } from '../services/reports/SecurityPosture.ts';
 import type { IGraphRepository } from '../repositories/contracts/IGraphRepository.ts';
 import type { IGraphsService } from '../services/contracts/index.ts';
 import { Token } from './Token.ts';
@@ -104,6 +108,10 @@ export const TOKENS = {
   IntrospectionService: new Token<IIntrospectionService>('IntrospectionService'),
   MetricsService: new Token<IMetricsService>('MetricsService'),
   GithubController: new Token<GithubController>('GithubController'),
+  SecurityReportRepository: new Token<ISecurityReportRepository>('SecurityReportRepository'),
+  SecurityPostureBuilder: new Token<SecurityPostureBuilder>('SecurityPostureBuilder'),
+  SecurityReportService: new Token<ISecurityReportService>('SecurityReportService'),
+  ReportController: new Token<ReportController>('ReportController'),
   ObjectStorage: new Token<IObjectStorage>('ObjectStorage'),
   MarkdownFolder: new Token<IMarkdownFolder>('MarkdownFolder'),
   DocumentRepository: new Token<IDocumentRepository>('DocumentRepository'),

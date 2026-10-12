@@ -41,6 +41,27 @@ add sarif sast "${CG_SARIF_SAST:-}"
 add sarif dast "${CG_SARIF_DAST:-}"
 add sarif sca "${CG_SARIF_SCA:-}"
 add sarif secrets "${CG_SARIF_SECRETS:-}"
+add sonarqube - "${CG_SONARQUBE:-}"
+
+# SonarQube/SonarCloud direto da API: medidas + quality gate num só JSON (lista).
+if [ -n "${CG_SONAR_HOST_URL:-}" ] && [ -n "${CG_SONAR_PROJECT_KEY:-}" ]; then
+  sonar_dir=$(mktemp -d)
+  sonar_auth=()
+  [ -n "${CG_SONAR_TOKEN:-}" ] && sonar_auth=(-u "${CG_SONAR_TOKEN}:")
+  sonar_keys='bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,security_rating,reliability_rating,sqale_rating,security_review_rating'
+  sonar_files=()
+  curl -sSf ${sonar_auth[@]+"${sonar_auth[@]}"} -G "${CG_SONAR_HOST_URL%/}/api/measures/component" \
+    --data-urlencode "component=${CG_SONAR_PROJECT_KEY}" --data-urlencode "metricKeys=${sonar_keys}" \
+    -o "$sonar_dir/measures.json" && sonar_files+=("$sonar_dir/measures.json")
+  curl -sSf ${sonar_auth[@]+"${sonar_auth[@]}"} -G "${CG_SONAR_HOST_URL%/}/api/qualitygates/project_status" \
+    --data-urlencode "projectKey=${CG_SONAR_PROJECT_KEY}" \
+    -o "$sonar_dir/gate.json" && sonar_files+=("$sonar_dir/gate.json")
+  if [ "${#sonar_files[@]}" -gt 0 ]; then
+    jq -s '.' "${sonar_files[@]}" >"$sonar_dir/sonar.json" && add sonarqube - "$sonar_dir/sonar.json"
+  else
+    echo "comm-graph: não foi possível ler o SonarQube em ${CG_SONAR_HOST_URL}"
+  fi
+fi
 
 metrics_json="${CG_METRICS:-}"
 [ -z "$metrics_json" ] && metrics_json='{}'
