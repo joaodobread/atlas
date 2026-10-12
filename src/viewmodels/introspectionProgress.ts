@@ -3,14 +3,15 @@ import type { IntrospectionProgress, ResumableAnalysis } from '../../shared/type
 
 /** Etapas por profundidade: rápida e média não leem o código. */
 const STAGES: Record<AnalysisDepth, IntrospectionStage[]> = {
-  fast: ['collecting', 'analyzing', 'scoring'],
-  medium: ['collecting', 'analyzing', 'scoring'],
-  full: ['collecting', 'analyzing', 'scanning', 'mapping', 'scoring'],
-  max: ['collecting', 'analyzing', 'scanning', 'mapping', 'scoring'],
+  fast: ['collecting', 'history', 'analyzing', 'scoring'],
+  medium: ['collecting', 'history', 'analyzing', 'scoring'],
+  full: ['collecting', 'history', 'analyzing', 'scanning', 'mapping', 'scoring'],
+  max: ['collecting', 'history', 'analyzing', 'scanning', 'mapping', 'scoring'],
 };
 
 const LABEL: Record<IntrospectionStage, string> = {
-  collecting: 'Coletando arquivos, dependências e PRs',
+  collecting: 'Lendo arquivos de configuração e dependências',
+  history: 'Lendo PRs, revisões e commits',
   analyzing: 'Analisando com o LLM',
   scanning: 'Lendo o código',
   mapping: 'Mapeando as chamadas com o LLM',
@@ -18,7 +19,7 @@ const LABEL: Record<IntrospectionStage, string> = {
 };
 
 /** Unidade do contador de cada etapa contável. */
-const UNIT: Partial<Record<IntrospectionStage, string>> = { scanning: 'arquivos', mapping: 'lotes' };
+const UNIT: Partial<Record<IntrospectionStage, string>> = { collecting: 'arquivos', history: 'requisições', scanning: 'arquivos', mapping: 'lotes' };
 
 export interface ProgressRow {
   repo: string;
