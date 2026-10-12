@@ -48,6 +48,7 @@ const DEPTH_RANK: Record<AnalysisDepth, number> = { fast: 0, medium: 1, full: 2,
 const ACTIVITY_CONCURRENCY = 6;
 const STAGE_LABEL: Record<IntrospectionStage, string> = {
   collecting: 'coleta',
+  history: 'leitura de PRs e commits',
   analyzing: 'análise pelo LLM',
   scanning: 'leitura do código',
   mapping: 'mapeamento pelo LLM',
@@ -377,20 +378,26 @@ export class IntrospectionService implements IIntrospectionService {
       };
       const resume = checkpoint as IntrospectionCheckpoint | null;
 
-      const collected = await this.collector.collect({
-        owner: repo.owner,
-        name: repo.name,
-        sha,
-        branch: repo.defaultBranch ?? 'main',
-        token: s.token,
-        description: repo.description,
-      });
+      const collected = await this.collector.collect(
+        {
+          owner: repo.owner,
+          name: repo.name,
+          sha,
+          branch: repo.defaultBranch ?? 'main',
+          token: s.token,
+          description: repo.description,
+        },
+        (done, total) => stage('collecting', done, total),
+      );
       const f = collected.facts;
+      stage('history');
       const [vulns, fresh, runtime, proc] = await Promise.all([
         f.dependencies.length ? this.intel.vulnerabilities(f.dependencies).catch(() => null) : null,
         f.dependencies.length ? this.intel.freshness(f.dependencies).catch(() => null) : null,
         f.runtime ? this.intel.runtimeSupport(f.runtime.name, f.runtime.version).catch(() => null) : null,
-        this.processCollector.collect(repo.owner, repo.name, repo.defaultBranch ?? 'main', s.token).catch(() => null),
+        this.processCollector
+          .collect(repo.owner, repo.name, repo.defaultBranch ?? 'main', s.token, (done, total) => stage('history', done, total))
+          .catch(() => null),
       ]);
       if (proc) await this.repos.saveProcess(id, proc);
       await this.repos.saveActivity(id, await this.activityCollector.collect(repo.owner, repo.name, s.token));
