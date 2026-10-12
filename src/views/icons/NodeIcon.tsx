@@ -37,13 +37,10 @@ import {
   siRedis,
   siElasticsearch,
   siApachecassandra,
-  siOracle,
-  siAmazondynamodb,
   siSupabase,
   siFirebase,
   siRabbitmq,
   siApachekafka,
-  siAmazonsqs,
   siNodedotjs,
   siTypescript,
   siJavascript,
@@ -76,9 +73,6 @@ import {
   siGraphql,
   siDocker,
   siKubernetes,
-  siAmazonwebservices,
-  siAwslambda,
-  siAmazons3,
   siGooglecloud,
   siCloudflare,
   siVercel,
@@ -95,7 +89,6 @@ import {
   siStripe,
   siAuth0,
   siKeycloak,
-  siOpenai,
   siAnthropic,
   type SimpleIcon,
 } from 'simple-icons';
@@ -111,13 +104,10 @@ const BRANDS: Record<string, SimpleIcon> = {
   redis: siRedis,
   elasticsearch: siElasticsearch,
   apachecassandra: siApachecassandra,
-  oracle: siOracle,
-  amazondynamodb: siAmazondynamodb,
   supabase: siSupabase,
   firebase: siFirebase,
   rabbitmq: siRabbitmq,
   apachekafka: siApachekafka,
-  amazonsqs: siAmazonsqs,
   nodedotjs: siNodedotjs,
   typescript: siTypescript,
   javascript: siJavascript,
@@ -150,9 +140,6 @@ const BRANDS: Record<string, SimpleIcon> = {
   graphql: siGraphql,
   docker: siDocker,
   kubernetes: siKubernetes,
-  amazonwebservices: siAmazonwebservices,
-  awslambda: siAwslambda,
-  amazons3: siAmazons3,
   googlecloud: siGooglecloud,
   cloudflare: siCloudflare,
   vercel: siVercel,
@@ -169,7 +156,6 @@ const BRANDS: Record<string, SimpleIcon> = {
   stripe: siStripe,
   auth0: siAuth0,
   keycloak: siKeycloak,
-  openai: siOpenai,
   anthropic: siAnthropic,
 };
 
@@ -202,6 +188,20 @@ const GENERIC: Record<string, ComponentType<LucideProps>> = {
   cpu: Cpu,
 };
 
+/**
+ * Marcas que o simple-icons removeu (16.x, por pedido dos donos das marcas): os ids continuam válidos
+ * (dados salvos não quebram) e viram um ícone genérico equivalente.
+ */
+const REMOVED_BRANDS: Record<string, string> = {
+  amazonwebservices: 'cloud',
+  awslambda: 'zap',
+  amazons3: 'hard-drive',
+  amazonsqs: 'inbox',
+  amazondynamodb: 'database',
+  oracle: 'database',
+  openai: 'bot',
+};
+
 interface NodeIconProps {
   id: string;
   size?: number;
@@ -227,7 +227,7 @@ export function NodeIcon({ id, size = 16, color = 'currentColor', monochrome = f
       );
     }
   }
-  const Generic = GENERIC[name] ?? Box;
+  const Generic = GENERIC[set === 'si' ? (REMOVED_BRANDS[name] ?? name) : name] ?? Box;
   return <Generic x={x} y={y} size={size} color={color} strokeWidth={2} style={style} />;
 }
 
