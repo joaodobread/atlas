@@ -82,7 +82,8 @@ export class RouteBinder {
         const controller = this.container.resolve(token);
         const fn = controller[action] as unknown as Action;
         const result = await fn.call(controller, {
-          params: req.params,
+          // Express 5: parâmetros curinga (`*nome`) chegam como lista de segmentos.
+          params: Object.fromEntries(Object.entries(req.params).map(([k, v]) => [k, Array.isArray(v) ? v.join('/') : v])),
           query: req.query as Record<string, unknown>,
           body: req.body as unknown,
           user,
