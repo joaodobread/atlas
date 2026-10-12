@@ -52,7 +52,7 @@
     "d3-force-3d": "^3.0.6",
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.6",
-    "lucide-react": "^0.460.0",
+    "lucide-react": "^1.52.0",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2003",
